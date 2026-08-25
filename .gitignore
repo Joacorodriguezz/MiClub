@@ -1,0 +1,53 @@
+# dependencias
+node_modules/
+.pnp
+.pnp.*
+
+# build
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+
+# entorno
+.env
+.env*.local
+!.env.example
+
+# vercel
+.vercel
+
+# supabase
+.branches
+.temp
+supabase/.temp/
+
+# tests
+coverage/
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# padrones reales de clubes: contienen datos personales, incluidos los de menores.
+# Ver docs/05-arquitectura.md, seccion legal. Nunca versionar.
+/datos-privados/
+*.xlsx
+*.xls
+*.csv
+
+# sistema operativo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# editores
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
