@@ -2,7 +2,7 @@
 
 **Trabajo Práctico Integrador — Ingeniería de Software en la Nube**
 UTN FRLP · Departamento de Ingeniería en Sistemas de Información · Ciclo lectivo 2026
-Hito: Clase 1 · Equipo: 3–4 integrantes
+Hito: Clase 1 · Equipo: Rodriguez Joaquin, Legorburu Lucas, Devida Facundo y Giordani Luca
 
 ---
 
