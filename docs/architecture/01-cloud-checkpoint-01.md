@@ -2,7 +2,10 @@
 
 **Fecha de corte:** 28/09/2026  
 **Base examinada:** `development` en `ec016b3f44a2380e8ce08048e74a9a3e6b8441a5`  
-**Estado:** propuesta de despliegue para revisión del equipo; los servicios descritos aquí no se consideran provisionados por el hecho de figurar en este documento.
+**Estado:** decisión de arquitectura cloud para el checkpoint 01. La configuración
+versionada está en [`infra/`](../../infra/README.md). Los servicios no se consideran
+provisionados hasta completar [`infra/environments.md`](../../infra/environments.md)
+con URLs verificables.
 
 ## 1. Alcance y criterio de lectura
 
@@ -26,24 +29,23 @@ La [revisión D6](../../AI-DECISIONS.md) reemplazó Next.js y Vercel Functions p
 | Base de datos | `backend/prisma/schema.prisma` con datasource PostgreSQL | Sin modelos, migraciones, RLS ni conexión demostrada |
 | Auth, pagos, IA, jobs y storage | Carpetas y documentos de diseño | No implementados |
 | Automatización | Plantilla de PR en `.github/` | Sin workflow de GitHub Actions en esta rama |
-| Infraestructura | Sin archivos de despliegue o enlaces a entornos en el repo | No hay evidencia verificable de provisión ni de URL pública |
+| Infraestructura | [`infra/render.yaml`](../../infra/render.yaml), [`frontend/vercel.json`](../../frontend/vercel.json), [`infra/README.md`](../../infra/README.md) | Config versionada; falta completar [`infra/environments.md`](../../infra/environments.md) tras provisionar |
 
 La organización del código es un **monolito modular**: una API desplegable, con módulos de dominio separados, y un frontend independiente. Las carpetas no constituyen servicios desplegados ni microservicios.
 
-## 3. Topología propuesta
+## 3. Topología cloud (decisión checkpoint 01)
 
-La siguiente combinación aprovecha servicios gestionados sin obligar a adaptar Express a funciones efímeras:
+La siguiente combinación aprovecha servicios gestionados sin obligar a adaptar Express a
+funciones efímeras. Configuración versionada en [`infra/`](../../infra/README.md).
 
-**Decisión pendiente:** Render y la combinación Vercel + Render + Supabase son recomendaciones de este documento. Su inclusión no aprueba un proveedor, un plan de pago ni una contratación. Para adoptar la topología, el equipo debe completar el registro de decisiones de la sección 6.1.
-
-| Función | Servicio propuesto | Motivo y consecuencia |
-|---|---|---|
-| Frontend estático | Vercel, proyecto con raíz `frontend/` | Publica el build de Vite en CDN y crea previews por PR. Al ser una SPA, requiere rewrite de rutas hacia `index.html`; no aporta SSR por sí misma. |
-| API | Render Web Service, raíz `backend/` | Ejecuta el proceso Express persistente, compatible con `server.ts` y con webhooks HTTP. Hay que configurar build, start, variables, health check y dimensionamiento. |
-| Datos, identidad y archivos | Supabase Postgres, Auth y Storage | Reúne PostgreSQL gestionado, identidad de administradores y objetos en un proyecto. Prisma accede a Postgres **solo desde el backend**. Se necesitan roles de runtime sin `BYPASSRLS` y migraciones versionadas. |
-| Trabajo asíncrono | Tabla de jobs en PostgreSQL; worker y disparador periódico en Render cuando se implementen | Mantiene webhooks, emisión e IA fuera del tiempo de respuesta. El worker es otro proceso desplegable, aunque comparta código y base con la API; su provisión queda pendiente. |
-| Pagos e IA | Mercado Pago y proveedor de IA, integrados únicamente desde la API/worker | El frontend no recibe credenciales privadas. Mercado Pago recibe su dinero en la cuenta del club según D1; compatibilidades comerciales aún requieren validación en sandbox. |
-| Telemetría | Logs estructurados del backend y servicio de errores propuesto (Sentry) | Permite seguir solicitudes, jobs y pagos con identificadores de correlación, sin registrar datos personales ni tokens. |
+| Función | Servicio | Por qué se eligió | Alternativa descartada |
+|---|---|---|---|
+| Frontend estático | **Vercel** (`frontend/`) | CDN global, previews por PR, integración nativa con Vite. Costo bajo para SPA estática. | AWS S3 + CloudFront: más plomería (IAM, certificados) sin beneficio en el MVP. |
+| API | **Render** Web Service (`backend/`) | Proceso Express persistente; webhooks HTTP sin límite de timeout de funciones serverless. Blueprint en `infra/render.yaml`. | Vercel Functions: timeouts pelean con webhooks y jobs; incompatible con worker persistente. |
+| Datos + Auth + Storage | **Supabase** | Postgres gestionado con RLS nativo, Auth y Storage en un proyecto. Prisma se conecta solo desde el backend. | RDS + Cognito + S3: más control pero semanas de IaC; descartado por costo de oportunidad (doc 05). |
+| Trabajo asíncrono | Cola en Postgres + **Render** worker/Cron *(CP2)* | Sin Redis extra; mismo runtime que la API. | SQS + Lambda: válido en AWS pero fuera del stack elegido para este cuatrimestre. |
+| Pagos | **Mercado Pago** *(CP2)* | OAuth marketplace: la plata cae en la cuenta del club (D1). | Cobro en cuenta propia: custodia de fondos de terceros. |
+| IA en el producto | **Claude API** *(CP2)* | Salida estructurada para plan de mapeo y conciliación semántica (doc 09). | OpenAI/Gemini: intercambiables vía módulo `ia/`; Claude documentado en ONE-PAGER. |
 
 **Trade-off:** son tres plataformas para frontend, API y datos. Simplifican la operación de cada pieza y hacen visible la separación del sistema, pero agregan configuración entre proveedores, costos base, latencia entre regiones y tres consolas. Antes de provisionar, el equipo debe comprobar presupuesto, región, límites del plan elegido y conectividad. Un hosting único con frontend estático, API y Postgres gestionado es una alternativa válida si esos costos pesan más; requiere documentar cómo resolverá identidad y storage.
 
@@ -120,8 +122,8 @@ Según la sección 5 del **PDF original del TPI**, el hito del 28/09 solicita:
 
 | Requisito del enunciado | Evidencia prevista | Estado al corte |
 |---|---|---|
-| Diagrama cloud detallado y definición de arquitectura | Documento coherente con el stack, diagrama y decisiones justificadas | Este documento es una propuesta pendiente de revisión del equipo |
-| Setup de infraestructura | Registro de proyectos, configuración y conexiones; URL o comprobación reproducible del entorno inicial | No hay evidencia en el repositorio examinado |
+| Diagrama cloud detallado y definición de arquitectura | Documento coherente con el stack, diagrama y decisiones justificadas | Este documento + diagrama Mermaid (sección 3) |
+| Setup de infraestructura | Registro de proyectos, configuración y conexiones; URL o comprobación reproducible del entorno inicial | Config en [`infra/`](../../infra/README.md); completar [`environments.md`](../../infra/environments.md) tras provisionar |
 | Repositorio inicial con actividad | Commits y PRs revisados, con contribuciones trazables | Hay actividad; su evaluación individual corresponde a la cátedra |
 
 Para cerrar la propuesta de despliegue, el equipo debe registrar estas decisiones, todavía pendientes:
@@ -145,9 +147,9 @@ La siguiente secuencia combina pasos para demostrar el setup con las metas que e
 
 | Prioridad | Entrega verificable | Estado al corte |
 |---|---|---|
-| 1 | Aprobar proveedores, región, ambientes y responsables; actualizar D6, README y la matriz de servicios cloud con esta decisión | Propuesto |
-| 2 | Instalar dependencias reales, crear el entry point del frontend y comprobar builds de frontend y API | Pendiente |
-| 3 | Provisionar proyectos y publicar una URL de frontend y `/health` de API; documentar configuración sin secretos | Sin evidencia en el repo |
+| 1 | Aprobar proveedores, región, ambientes y responsables; actualizar D6, README y la matriz de servicios cloud con esta decisión | README e [`infra/`](../../infra/README.md) alineados; revisión humana AID-007 pendiente |
+| 2 | Instalar dependencias reales, crear el entry point del frontend y comprobar builds de frontend y API | Pendiente (checkpoint 02) |
+| 3 | Provisionar proyectos y publicar una URL de frontend y `/health` de API; documentar configuración sin secretos | Procedimiento listo; falta completar [`environments.md`](../../infra/environments.md) |
 | 4 | Crear schema y migración inicial; separar credenciales de migración/runtime, activar RLS y probar aislamiento con dos clubes | Pendiente |
 | 5 | Agregar GitHub Actions, registrar al menos una ejecución verde y enlazar el tablero de tareas | Pendiente |
 | 6 | Completar la revisión humana de AID-006 y registrar las decisiones nuevas de infraestructura en `AI-DECISIONS.md` | Pendiente de validación humana |
