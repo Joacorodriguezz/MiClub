@@ -1,0 +1,21 @@
+# Blueprint de Render para la API de MiClub.
+# Uso: conectar el repositorio en Render → New → Blueprint → seleccionar este archivo.
+# Documentación: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: miclub-api
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install && npm run build && npx prisma generate
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
