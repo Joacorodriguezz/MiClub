@@ -256,6 +256,36 @@ Las comprobaciones de fuentes realizadas por el asistente son revisión asistida
 
 ---
 
+## AID-008 · Decisiones de despliegue CP1 (regiones, planes, presupuesto)
+
+**Fecha:** 2026-09-28 · **Responsable:** Luca Giordani · **Herramienta:** Cursor Agent
+
+**Problema abordado**
+El checkpoint 01 exige setup de infraestructura con decisiones justificadas. La config
+estaba versionada (`infra/render.yaml`, guía de provisión) pero faltaba cerrar las
+decisiones de la sección 6.1 del doc cloud: proveedores, región, presupuesto y registro
+de ambientes.
+
+**Prompt / Herramienta**
+Solicitud de cerrar el entregable CP1 completando [`infra/environments.md`](infra/environments.md),
+un script de verificación reproducible y la actualización del estado en el doc de
+arquitectura. Asistente: Cursor Agent.
+
+**Salida de la IA**
+- [`infra/environments.md`](infra/environments.md): decisiones cerradas (Vercel Hobby,
+  Render Free, Supabase Free; DB en São Paulo, API en Oregon; USD 0/mes estimado).
+- [`infra/verify-setup.sh`](infra/verify-setup.sh): curl a `/health` y frontend HTTPS.
+- Actualización de sección 6 en
+  [`docs/architecture/01-cloud-checkpoint-01.md`](docs/architecture/01-cloud-checkpoint-01.md).
+
+**Validación y corrección humana**
+- **Aceptado:** topología ya aprobada en AID-007; estas decisiones operativas son
+  coherentes con el doc cloud y los free tiers del MVP.
+- **Pendiente:** otro integrante debe validar región/presupuesto y completar URLs tras
+  provisionar Supabase, Render y Vercel (~15 min). Las URLs no se inventan en el repo.
+
+---
+
 ## Plantilla para nuevas entradas
 
 ```markdown

@@ -123,17 +123,17 @@ Según la sección 5 del **PDF original del TPI**, el hito del 28/09 solicita:
 | Requisito del enunciado | Evidencia prevista | Estado al corte |
 |---|---|---|
 | Diagrama cloud detallado y definición de arquitectura | Documento coherente con el stack, diagrama y decisiones justificadas | Este documento + diagrama Mermaid (sección 3) |
-| Setup de infraestructura | Registro de proyectos, configuración y conexiones; URL o comprobación reproducible del entorno inicial | Config en [`infra/`](../../infra/README.md); completar [`environments.md`](../../infra/environments.md) tras provisionar |
+| Setup de infraestructura | Registro de proyectos, configuración y conexiones; URL o comprobación reproducible del entorno inicial | Config en [`infra/`](../../infra/README.md); decisiones en [`environments.md`](../../infra/environments.md); **URLs pendientes** de provisión (~15 min) |
 | Repositorio inicial con actividad | Commits y PRs revisados, con contribuciones trazables | Hay actividad; su evaluación individual corresponde a la cátedra |
 
-Para cerrar la propuesta de despliegue, el equipo debe registrar estas decisiones, todavía pendientes:
+Decisiones de despliegue registradas en [`infra/environments.md`](../../infra/environments.md) (2026-09-28):
 
-| Decisión | Qué registrar para verificarla |
+| Decisión | Estado |
 |---|---|
-| Proveedores y planes | Servicio elegido por componente y condiciones relevantes del plan |
-| Región y conectividad | Región de API, worker y DB, modo de conexión y una comprobación de conectividad/latencia |
-| Capacidad y presupuesto | Tamaño inicial de instancias, límites de conexiones/concurrencia, supuestos de uso, costo mensual estimado en USD y fecha/fuente de la estimación |
-| Ambientes y operación | Rama de despliegue, proyectos y URLs por ambiente, responsable, política de backup y objetivo de recuperación |
+| Proveedores y planes | ✅ Vercel Hobby + Render Free + Supabase Free |
+| Región y conectividad | ✅ Supabase São Paulo; Render Oregon; comprobación `/health` post-deploy |
+| Capacidad y presupuesto | ✅ USD 0/mes estimado (free tiers); fuente pricing público 2026-09-28 |
+| Ambientes y operación | ✅ Rama `development`, responsable M1; **URLs** pendientes de provisión |
 
 Una URL de frontend y un `/health` de API constituyen evidencia útil del setup inicial; no equivalen a una demo funcional del producto. La aprobación de proveedores, planes y presupuesto debe preceder a su contratación.
 
@@ -147,12 +147,12 @@ La siguiente secuencia combina pasos para demostrar el setup con las metas que e
 
 | Prioridad | Entrega verificable | Estado al corte |
 |---|---|---|
-| 1 | Aprobar proveedores, región, ambientes y responsables; actualizar D6, README y la matriz de servicios cloud con esta decisión | README e [`infra/`](../../infra/README.md) alineados; revisión humana AID-007 pendiente |
+| 1 | Aprobar proveedores, región, ambientes y responsables; actualizar D6, README y la matriz de servicios cloud con esta decisión | ✅ Decisiones en [`environments.md`](../../infra/environments.md); revisión humana AID-007 pendiente |
 | 2 | Instalar dependencias reales, crear el entry point del frontend y comprobar builds de frontend y API | Pendiente (checkpoint 02) |
-| 3 | Provisionar proyectos y publicar una URL de frontend y `/health` de API; documentar configuración sin secretos | Procedimiento listo; falta completar [`environments.md`](../../infra/environments.md) |
+| 3 | Provisionar proyectos y publicar una URL de frontend y `/health` de API; documentar configuración sin secretos | Procedimiento y decisiones listos; **URLs** y [`verify-setup.sh`](../../infra/verify-setup.sh) pendientes de ejecutar |
 | 4 | Crear schema y migración inicial; separar credenciales de migración/runtime, activar RLS y probar aislamiento con dos clubes | Pendiente |
 | 5 | Agregar GitHub Actions, registrar al menos una ejecución verde y enlazar el tablero de tareas | Pendiente |
-| 6 | Completar la revisión humana de AID-006 y registrar las decisiones nuevas de infraestructura en `AI-DECISIONS.md` | Pendiente de validación humana |
+| 6 | Completar la revisión humana de AID-006 y registrar las decisiones nuevas de infraestructura en `AI-DECISIONS.md` | AID-008 registra decisiones CP1; validación humana pendiente |
 
 **Criterio de cierre:** este archivo aporta una propuesta documental. Para considerarla lista para presentar, el equipo debe revisar el diseño, cerrar las decisiones de la sección 6.1 y reconciliar los documentos afectados por D6. El setup se acredita con recursos configurados y evidencia verificable. Se informan por separado los compromisos internos alcanzados y pendientes. La aceptación del checkpoint corresponde a la cátedra; la existencia del diagrama no autoriza a marcar todas las casillas de [10-entrega-academica](../10-entrega-academica.md).
 
