@@ -59,15 +59,23 @@ Referencia: [Vite on Vercel](https://vercel.com/docs/frameworks/frontend/vite).
 | Entregable | Cómo comprobarlo |
 |---|---|
 | Diagrama cloud | [01-cloud-checkpoint-01.md](../docs/architecture/01-cloud-checkpoint-01.md) |
-| Setup de infra | Proyectos creados + [`environments.md`](environments.md) completado + configs en este directorio |
+| Setup de infra | Decisiones en [`environments.md`](environments.md) + proyectos provisionados + script [`verify-setup.sh`](verify-setup.sh) |
 | Repo con actividad | Commits y PRs del equipo en GitHub |
+
+Tras provisionar, ejecutar:
+
+```bash
+chmod +x infra/verify-setup.sh
+./infra/verify-setup.sh https://TU-API.onrender.com https://TU-APP.vercel.app
+```
 
 ## Archivos en este directorio
 
 | Archivo | Propósito |
 |---|---|
 | [`render.yaml`](render.yaml) | Blueprint de Render para la API |
-| [`environments.md`](environments.md) | Registro de URLs y proyectos (sin secretos) |
+| [`environments.md`](environments.md) | Decisiones de despliegue, URLs y proyectos (sin secretos) |
+| [`verify-setup.sh`](verify-setup.sh) | Comprobación mínima post-provisión (`/health` + frontend HTTPS) |
 | [`README.md`](README.md) | Este procedimiento |
 
 ## Fuera de alcance del checkpoint 01
