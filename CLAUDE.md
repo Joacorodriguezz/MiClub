@@ -37,6 +37,7 @@ Decidido hasta ahora:
 | [docs/09-ia-en-el-producto.md](docs/09-ia-en-el-producto.md) | La IA **dentro del producto**: qué hace, cómo se integra, cómo degrada |
 | [docs/10-entrega-academica.md](docs/10-entrega-academica.md) | Requisitos del TPI: hitos, Git, PRs, kanban, CI/CD, defensa |
 | [ONE-PAGER.md](ONE-PAGER.md) | Entregable de la Clase 1 |
+| [docs/architecture/01-cloud-checkpoint-01.md](docs/architecture/01-cloud-checkpoint-01.md) | Propuesta cloud del checkpoint 01, estado real y requisitos de entrega |
 | [AI-DECISIONS.md](AI-DECISIONS.md) | Log de auditoría del uso de IA **para desarrollar**. Obligatorio |
 
 ## Reglas no negociables
@@ -72,3 +73,4 @@ Aplican a todo el código, sin excepción. Si algo las contradice, es un bug.
   `feat(socios):`, `fix(cobranza):`, `feat(ia):`. Detalle en el [doc 10](docs/10-entrega-academica.md).
 - Si un asistente de IA participó en una decisión de diseño o en código que llega a
   `main`, se agrega una entrada en [AI-DECISIONS.md](AI-DECISIONS.md).
+

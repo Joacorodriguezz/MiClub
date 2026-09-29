@@ -220,6 +220,42 @@ tres contextos Platform/Organization/Portal + `shared/`), más `docs/architectur
 
 ---
 
+## AID-007 · Documento cloud del checkpoint 01
+
+**Fecha:** 2026-09-28 · **Herramienta:** ChatGPT / Codex
+**Estado:** propuesta documentada; revisión humana del equipo pendiente en el PR.
+
+**Problema abordado**
+Documentar una arquitectura cloud coherente con el esqueleto React/Vite y
+Express/Prisma de `development`, tras el cambio de D6, y distinguir el diseño
+propuesto de la infraestructura efectivamente comprobada.
+
+**Prompt / Herramienta**
+Solicitud de revisar `development`, redactar el documento cloud, revisar su
+contenido y aplicar las correcciones antes de abrir un PR. Se usó ChatGPT /
+Codex, el repositorio, el PDF original del TPI y documentación oficial de los
+proveedores. Los commits siguen el formato semántico del repositorio.
+
+**Salida de la IA**
+Documento [cloud del checkpoint 01](docs/architecture/01-cloud-checkpoint-01.md),
+con Vercel, Render y Supabase como topología propuesta. Incluye un diagrama y
+el estado comprobado en `ec016b3f44a2380e8ce08048e74a9a3e6b8441a5`.
+La revisión asistida corrigió seis puntos: recepción durable del webhook antes
+del acuse, rol de runtime sin bypass de RLS, claves públicas frente a secretas,
+disparador periódico y reconciliación en el diagrama, requisitos del TPI frente
+a compromisos internos, y eliminación de una conclusión prematura de cumplimiento.
+
+**Validación y corrección humana**
+El solicitante autorizó aplicar las correcciones y abrir el PR después de recibir
+la revisión. Esa autorización no acredita una prueba de infraestructura ni la
+elección final de proveedores o planes. Esta sección registra ese hecho y **no
+sustituye la auditoría escrita por una persona del equipo**, exigida por este log.
+El revisor debe dejar en el PR o completar aquí qué acepta, corrige o descarta
+del diseño, especialmente proveedores, región, presupuesto y aislamiento.
+Las comprobaciones de fuentes realizadas por el asistente son revisión asistida.
+
+---
+
 ## Plantilla para nuevas entradas
 
 ```markdown
