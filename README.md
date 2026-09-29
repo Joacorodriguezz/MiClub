@@ -3,8 +3,8 @@
 SaaS de gestión de socios y cobranza de cuotas para clubes. Argentina, Mercado Pago,
 multi-tenant desde el día uno.
 
-> **Estado: Fase 0 — definición.** La documentación de producto y arquitectura está
-> cerrada; el desarrollo todavía no arrancó.
+> **Estado: Checkpoint 1 — definición de arquitectura.** Esqueleto de código en
+> `frontend/` y `backend/`; despliegue inicial documentado en [`infra/`](infra/README.md).
 
 ## El problema
 
@@ -44,16 +44,19 @@ Detalle en [docs/09-ia-en-el-producto.md](docs/09-ia-en-el-producto.md).
 
 | Componente | Elección |
 |---|---|
-| Frontend | Next.js (App Router) + TypeScript en Vercel |
-| Backend / API | Route Handlers + Vercel Functions (serverless) |
-| Persistencia | Supabase Postgres, con Row Level Security |
+| Frontend | React + Vite + TypeScript, desplegado en **Vercel** (CDN) |
+| Backend / API | Node.js + Express + TypeScript, desplegado en **Render** (Web Service) |
+| Persistencia | **Supabase Postgres**, con Row Level Security |
 | Auth | Supabase Auth |
-| Jobs | Cola en Postgres + Vercel Cron |
-| IA | Claude API con salida estructurada |
-| Pagos | Mercado Pago en modo marketplace (OAuth) |
-| Observabilidad | Sentry + logs estructurados por `club_id` |
+| Storage | Supabase Storage |
+| Jobs | Cola en Postgres + worker en Render *(checkpoint 02)* |
+| IA | Claude API con salida estructurada *(checkpoint 02)* |
+| Pagos | Mercado Pago en modo marketplace (OAuth) *(checkpoint 02)* |
 
-La justificación de cada componente, con alternativas evaluadas y descartadas, está en
+La topología cloud, el diagrama y la justificación por servicio están en
+[docs/architecture/01-cloud-checkpoint-01.md](docs/architecture/01-cloud-checkpoint-01.md).
+El setup inicial de infraestructura se documenta en [`infra/README.md`](infra/README.md).
+Contexto histórico del stack original (Next.js + Vercel Functions) en
 [docs/05-arquitectura.md](docs/05-arquitectura.md).
 
 ## Documentación
@@ -67,6 +70,8 @@ Empezar por [CLAUDE.md](CLAUDE.md): contexto del proyecto y **reglas no negociab
 | [03 · MVP](docs/03-mvp.md) | Alcance cerrado: qué entra, qué no, criterios de aceptación |
 | [04 · Pagos y Mercado Pago](docs/04-pagos-y-mercadopago.md) | La decisión más cara del proyecto: cómo fluye la plata |
 | [05 · Arquitectura](docs/05-arquitectura.md) | Multi-tenancy, stack justificado, diseño cloud-native, seguridad |
+| [Arquitectura cloud · CP1](docs/architecture/01-cloud-checkpoint-01.md) | Diagrama cloud, servicios y setup de infraestructura |
+| [Infraestructura](infra/README.md) | Cómo provisionar Vercel, Render y Supabase |
 | [06 · Decisiones abiertas](docs/06-decisiones-abiertas.md) | Qué está decidido, qué no, y qué bloquea |
 | [07 · Roadmap](docs/07-roadmap.md) | Fases y orden de construcción |
 | [08 · Descubrimiento](docs/08-descubrimiento-club.md) | Guion de entrevista para hablar con clubes |
