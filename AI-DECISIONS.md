@@ -286,6 +286,34 @@ arquitectura. Asistente: Cursor Agent.
 
 ---
 
+## AID-009 · Backend base operativo (Express, health, Prisma, test)
+
+**Fecha:** 2026-10-08 · **Responsable:** Luca Giordani · **Herramienta:** Cursor Grok 4.6
+
+**Problema abordado**
+El checkpoint 02 pide backend operativo y una prueba de integración, compatible con
+el Blueprint de Render (`npm run build` / `npm start` / `GET /health`). El esqueleto
+tenía scripts y archivos vacíos, sin dependencias ni lockfile.
+
+**Prompt / Herramienta**
+Implementar el backend base en cinco pasos: toolchain Express+TypeScript, CORS y
+errores, `/health`, cliente Prisma mínimo, Vitest+Supertest. Sin lógica de negocio,
+sin secretos, sin tocar frontend/infra/docs/.github.
+
+**Salida de la IA**
+- `backend/package.json` + `package-lock.json` (Express 4, Prisma 6, TypeScript 5,
+  Vitest 2) para correr en Node 18+ y en el build de Render.
+- `createApp()` con `express.json`, CORS vía `CORS_ORIGIN`, 404 y error handler.
+- `GET /health` → `{ status, uptime, timestamp }`.
+- Cliente Prisma singleton sin modelos de dominio.
+- Test de integración de `/health` (`npm test`).
+
+**Validación y corrección humana**
+- **Pendiente:** revisión del PR por un integrante. Verificar versiones fijadas
+  (Prisma 6 frente a latest 7/8) y que no se haya colado lógica de negocio.
+
+---
+
 ## Plantilla para nuevas entradas
 
 ```markdown
