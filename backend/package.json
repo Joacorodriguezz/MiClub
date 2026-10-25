@@ -11,7 +11,9 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "prisma:generate": "prisma generate",
-    "test": "vitest run"
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "engines": {
     "node": ">=18.18"
