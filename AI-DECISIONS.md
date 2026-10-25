@@ -325,6 +325,58 @@ sin secretos, sin tocar frontend/infra/docs/.github.
 
 ---
 
+## AID-010 · Schema multi-tenant, RLS, test de aislamiento y CI
+
+**Fecha:** 2026-10-25 · **Responsable:** Joaquín · **Herramienta:** Claude Opus 5.5 vía Claude Code
+
+**Problema abordado**
+El aislamiento entre clubes es una regla no negociable (CLAUDE.md, regla 3) y el
+doc 05 marca como riesgo técnico real la combinación de RLS con pooling de
+conexiones. Hacía falta el primer schema con tenant, aislamiento aplicado en la base,
+una prueba que lo demuestre y un CI que la haga bloqueante. El repo no tenía
+modelos, migraciones ni GitHub Actions.
+
+**Prompt / Herramienta**
+Claude Code, sobre la rama del PR #6. Pedido: plan explicado y luego implementación
+del schema mínimo (organizaciones, usuarios, membresías), RLS, contexto de tenant
+por request, test de aislamiento contra Postgres real y workflow de CI.
+
+**Salida de la IA**
+- Modelos `Organization`, `User` y `OrganizationMembership` (rol `OWNER`/`ADMIN`),
+  ids UUID, `deleted_at` para bajas lógicas. Nombres en inglés, como los módulos.
+- Migración `init_tenancy`: tablas generadas por Prisma más SQL escrito a mano con
+  RLS forzado (`FORCE ROW LEVEL SECURITY`), rol `miclub_app` sin `BYPASSRLS` y sin
+  permiso de DELETE, y la función `app_current_organization_id()`.
+- `withTenant(organizationId, fn)`: transacción con `SET LOCAL ROLE miclub_app` y
+  `set_config('app.organization_id', id, true)`. El contexto muere con la
+  transacción, lo que lo hace seguro con un pooler en modo transacción.
+- 9 tests de integración: lectura cruzada, falla cerrado sin tenant, inserción y
+  modificación cruzadas, DELETE prohibido y que el contexto no sobreviva a la
+  transacción.
+- `.github/workflows/backend-ci.yml`: Postgres 16 como servicio, typecheck, build,
+  tests, migraciones, chequeo de drift entre schema y SQL, test de aislamiento.
+
+Verificación hecha durante la sesión, contra Postgres 16 local:
+- Todo el pipeline en el orden del workflow, en verde.
+- Desactivando RLS en `organization_memberships`, 3 tests fallan: el test detecta
+  la regresión.
+- La migración aplica con un usuario no superusuario con `CREATEROLE`, como el
+  `postgres` de Supabase.
+- Hallazgo: con `FORCE ROW LEVEL SECURITY`, ese mismo usuario no puede insertar
+  sin tenant. Es lo buscado, pero los procesos administrativos (seed, alta de
+  clubes desde la plataforma) van a necesitar un rol con `BYPASSRLS`.
+
+**Validación y corrección humana**
+- _(A completar por Joaquín después de leer el código.)_ Puntos a validar:
+  - Confirmar en el proyecto de Supabase si el rol `postgres` tiene `BYPASSRLS`
+    (`select rolbypassrls from pg_roles where rolname = 'postgres'`) y decidir cómo
+    se hacen las operaciones de plataforma.
+  - Confirmar que la API se conecta por el pooler de Supabase en modo transacción.
+  - Revisar que nombrar el código en inglés (en lugar del español del CLAUDE.md
+    original) sea la decisión del equipo.
+
+---
+
 ## Plantilla para nuevas entradas
 
 ```markdown
