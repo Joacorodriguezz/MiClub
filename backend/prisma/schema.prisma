@@ -1,7 +1,14 @@
-// Schema base de Prisma para MiClub SaaS.
-// A propósito, SIN modelos todavía: el modelo de datos se define más adelante
-// (ver docs/02-glosario-y-dominio.md). Solo dejamos configurados el generator
-// y el datasource sobre PostgreSQL.
+// Schema de Prisma para MiClub SaaS.
+//
+// Tenant = Organization. Toda tabla con datos de un club lleva `organization_id`
+// y está protegida por Row Level Security en Postgres (ver la migración
+// `init_tenancy`). Las políticas RLS no se expresan en Prisma: viven en el SQL
+// de la migración.
+//
+// Convenciones:
+// - Tablas y columnas en snake_case (`@@map` / `@map`); modelos en PascalCase.
+// - Ids UUID generados por la base: no son enumerables como un id secuencial.
+// - Nada se borra: baja lógica con `deleted_at`. El rol de runtime no tiene DELETE.
 
 generator client {
   provider = "prisma-client-js"
@@ -10,4 +17,59 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+enum MembershipRole {
+  OWNER
+  ADMIN
+
+  @@map("membership_role")
+}
+
+/// Tenant del SaaS: un club, academia o institución.
+model Organization {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String
+  slug      String    @unique
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  memberships OrganizationMembership[]
+
+  @@map("organizations")
+}
+
+/// Usuario de la plataforma (administrador de uno o más clubes).
+/// No es un socio: los socios no inician sesión en el MVP.
+model User {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// Id del usuario en Supabase Auth (`auth.users.id`).
+  authUserId String    @unique @map("auth_user_id") @db.Uuid
+  email      String    @unique
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt  DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  memberships OrganizationMembership[]
+
+  @@map("users")
+}
+
+/// Acceso de un usuario a una organización, con su rol.
+model OrganizationMembership {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String         @map("organization_id") @db.Uuid
+  userId         String         @map("user_id") @db.Uuid
+  role           MembershipRole
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime?      @map("deleted_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@map("organization_memberships")
 }
