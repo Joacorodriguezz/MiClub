@@ -309,8 +309,19 @@ sin secretos, sin tocar frontend/infra/docs/.github.
 - Test de integración de `/health` (`npm test`).
 
 **Validación y corrección humana**
-- **Pendiente:** revisión del PR por un integrante. Verificar versiones fijadas
-  (Prisma 6 frente a latest 7/8) y que no se haya colado lógica de negocio.
+- **Aceptado:** alcance prolijo (sin lógica de negocio), `npm ci` / build / test en
+  local, commits convencionales y plantilla de PR. Cliente Prisma sin importadores ni
+  modelos: base preparada, la conexión real se validará en un PR posterior con Postgres.
+  `/health` sin DB alineado con liveness en Render.
+- **Corregido (revisión cruzada):** CORS con lista separada por comas y patrón opcional
+  (`CORS_ORIGIN_PATTERN`) para previews de Vercel; obligatorio `CORS_ORIGIN` si
+  `NODE_ENV=production` (fallo al arrancar, sin default silencioso a localhost);
+  middleware `cors` registrado antes de `express.json()` para no enmascarar 400 como
+  error de CORS. Permisos de `node_modules` y `cache: false` en Vitest por EACCES local.
+  Versiones fijadas Prisma 6 / Express 4 / Vitest 2 para Node 18+.
+- **Descartado / fuera de este PR:** `/ready` con `SELECT 1`, test de integración contra
+  Postgres, workflow de GitHub Actions y deduplicar `prisma generate` en `render.yaml`
+  (seguimiento en PRs del Checkpoint 2).
 
 ---
 

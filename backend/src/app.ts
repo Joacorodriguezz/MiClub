@@ -6,6 +6,7 @@ import express, {
   type Request,
   type Response,
 } from 'express';
+import { buildCorsOptions } from './config/cors';
 
 /**
  * Construye la aplicación Express (sin rutas de negocio todavía).
@@ -16,12 +17,9 @@ import express, {
 export function createApp(): Express {
   const app = express();
 
+  // CORS antes del body parser: JSON inválido sigue respondiendo con headers CORS.
+  app.use(cors(buildCorsOptions()));
   app.use(express.json());
-  app.use(
-    cors({
-      origin: process.env.CORS_ORIGIN ?? 'http://localhost:5173',
-    }),
-  );
 
   app.get('/health', (_req: Request, res: Response) => {
     res.status(200).json({
@@ -42,9 +40,14 @@ export function createApp(): Express {
     _next: NextFunction,
   ) => {
     const status =
-      typeof err === 'object' && err !== null && 'status' in err && typeof err.status === 'number'
-        ? err.status
-        : 500;
+      typeof err === 'object' &&
+      err !== null &&
+      'type' in err &&
+      err.type === 'entity.parse.failed'
+        ? 400
+        : typeof err === 'object' && err !== null && 'status' in err && typeof err.status === 'number'
+          ? err.status
+          : 500;
     let message = 'Internal Server Error';
     if (
       status < 500 &&
