@@ -35,7 +35,11 @@ model Organization {
   updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  memberships OrganizationMembership[]
+  memberships        OrganizationMembership[]
+  billingPeriods     BillingPeriod[]
+  charges            Charge[]
+  payments           Payment[]
+  paymentAllocations PaymentAllocation[]
 
   @@map("organizations")
 }
@@ -51,7 +55,10 @@ model User {
   updatedAt  DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt  DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  memberships OrganizationMembership[]
+  memberships          OrganizationMembership[]
+  issuedBillingPeriods BillingPeriod[]
+  createdCharges       Charge[]
+  recordedPayments     Payment[]
 
   @@map("users")
 }
@@ -72,4 +79,138 @@ model OrganizationMembership {
   @@unique([organizationId, userId])
   @@index([userId])
   @@map("organization_memberships")
+}
+
+// ---------------------------------------------------------------------------
+// Ledger de cobranza (módulos `finance` y `payments`).
+//
+// Reglas del CLAUDE.md que se hacen cumplir en la base (migración `finance_ledger`):
+// - Montos en centavos (`BigInt`), moneda explícita, nunca float.
+// - `charges`, `payments` y `payment_allocations` son inmutables: sin UPDATE ni
+//   DELETE. Las correcciones se asientan con registros nuevos.
+// - El saldo no se guarda: se deriva de cargos menos aplicaciones de pago.
+// - Fechas de vencimiento como `DATE` en hora de Argentina
+//   (America/Argentina/Buenos_Aires), sin conversión de zona.
+//
+// `account_id` es la cuenta (unidad de facturación, ver doc 02). La tabla de
+// cuentas es del módulo de padrón y todavía no existe: la FK se agrega en la
+// migración que la cree.
+// ---------------------------------------------------------------------------
+
+enum BillingPeriodStatus {
+  OPEN
+  ISSUED
+  CLOSED
+
+  @@map("billing_period_status")
+}
+
+enum ChargeType {
+  /// Cuota del período.
+  FEE
+  /// Recargo por atraso.
+  LATE_FEE
+
+  @@map("charge_type")
+}
+
+enum PaymentMethod {
+  CASH
+  TRANSFER
+  MERCADO_PAGO
+  OTHER
+
+  @@map("payment_method")
+}
+
+/// Período de cobro mensual de un club. `ISSUED` es irreversible.
+model BillingPeriod {
+  id             String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String              @map("organization_id") @db.Uuid
+  year           Int
+  /// 1 a 12.
+  month          Int
+  /// Vencimiento de las cuotas del período, en hora de Argentina.
+  dueDate        DateTime            @map("due_date") @db.Date
+  status         BillingPeriodStatus @default(OPEN)
+  issuedAt       DateTime?           @map("issued_at") @db.Timestamptz(6)
+  issuedByUserId String?             @map("issued_by_user_id") @db.Uuid
+  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  issuedBy     User?        @relation(fields: [issuedByUserId], references: [id])
+  charges      Charge[]
+
+  @@unique([organizationId, year, month])
+  @@map("billing_periods")
+}
+
+/// Deuda concreta de una cuenta. Inmutable: el monto queda congelado al emitir.
+model Charge {
+  id              String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId  String     @map("organization_id") @db.Uuid
+  accountId       String     @map("account_id") @db.Uuid
+  billingPeriodId String     @map("billing_period_id") @db.Uuid
+  type            ChargeType
+  concept         String
+  amountCents     BigInt     @map("amount_cents")
+  currency        String     @default("ARS") @db.Char(3)
+  dueDate         DateTime   @map("due_date") @db.Date
+  createdByUserId String?    @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization  Organization        @relation(fields: [organizationId], references: [id])
+  billingPeriod BillingPeriod       @relation(fields: [billingPeriodId], references: [id])
+  createdBy     User?               @relation(fields: [createdByUserId], references: [id])
+  allocations   PaymentAllocation[]
+
+  /// Emisión idempotente: un cargo por cuenta, período y tipo.
+  @@unique([organizationId, accountId, billingPeriodId, type])
+  @@index([organizationId, accountId])
+  @@index([billingPeriodId])
+  @@map("charges")
+}
+
+/// Dinero recibido de una cuenta. Inmutable.
+model Payment {
+  id                String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId    String        @map("organization_id") @db.Uuid
+  accountId         String        @map("account_id") @db.Uuid
+  amountCents       BigInt        @map("amount_cents")
+  currency          String        @default("ARS") @db.Char(3)
+  method            PaymentMethod
+  paidAt            DateTime      @map("paid_at") @db.Timestamptz(6)
+  /// Referencia del medio de pago (id de Mercado Pago, n° de transferencia).
+  /// Única por club: registrar dos veces el mismo pago falla.
+  externalReference String?       @map("external_reference")
+  notes             String?
+  recordedByUserId  String?       @map("recorded_by_user_id") @db.Uuid
+  createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization        @relation(fields: [organizationId], references: [id])
+  recordedBy   User?               @relation(fields: [recordedByUserId], references: [id])
+  allocations  PaymentAllocation[]
+
+  @@unique([organizationId, externalReference])
+  @@index([organizationId, accountId])
+  @@map("payments")
+}
+
+/// Qué parte de un pago cancela qué cargo. Inmutable.
+model PaymentAllocation {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  paymentId      String   @map("payment_id") @db.Uuid
+  chargeId       String   @map("charge_id") @db.Uuid
+  amountCents    BigInt   @map("amount_cents")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  payment      Payment      @relation(fields: [paymentId], references: [id])
+  charge       Charge       @relation(fields: [chargeId], references: [id])
+
+  @@unique([paymentId, chargeId])
+  @@index([chargeId])
+  @@map("payment_allocations")
 }
