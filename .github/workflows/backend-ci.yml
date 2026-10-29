@@ -10,6 +10,9 @@ on:
     paths:
       - 'backend/**'
       - '.github/workflows/backend-ci.yml'
+  # Corrida manual desde Actions, por si un PR queda sin CI (p. ej. tras un
+  # rebase mientras GitHub lo marcaba con conflictos y no disparó el workflow).
+  workflow_dispatch:
 
 concurrency:
   group: backend-ci-${{ github.ref }}
