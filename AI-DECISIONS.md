@@ -375,6 +375,67 @@ Verificación hecha durante la sesión, contra Postgres 16 local:
   - Revisar que nombrar el código en inglés (en lugar del español del CLAUDE.md
     original) sea la decisión del equipo.
 
+## AID-011 · Ledger de cobranza: períodos, cargos, pagos y cuenta corriente
+
+**Fecha:** 2026-10-29 · **Responsable:** Joaquín · **Herramienta:** Claude Opus 5.5 vía Claude Code
+
+**Problema abordado**
+El Checkpoint 2 pide backend operativo y pruebas de integración. El núcleo de
+MiClub es el ledger: emitir las cuotas de un período sin duplicar, registrar
+pagos, aplicarlos a la deuda y derivar el saldo, cumpliendo las reglas 1, 2, 3, 5,
+6 y 7 del CLAUDE.md. No había ninguna tabla de dinero.
+
+**Prompt / Herramienta**
+Claude Code, sobre la rama del PR #7. Pedido: implementar las tareas de M3
+Cobranza para el CP2 (schema del ledger, emisión idempotente, pago manual con
+aplicación a los cargos más viejos, saldo derivado y prueba de integración del
+flujo), commitear y pushear.
+
+**Salida de la IA**
+- Modelos `BillingPeriod`, `Charge`, `Payment` y `PaymentAllocation`. Montos
+  `BIGINT` en centavos, moneda `ARS`, vencimientos como `DATE` en hora de Argentina.
+- Migración `finance_ledger`: el SQL de tablas lo generó el propio Prisma
+  (`migrate diff` entre el schema anterior y el nuevo) y se le agregó a mano:
+  checks de montos, triggers que prohíben UPDATE y DELETE en los registros de
+  dinero (también para el dueño de las tablas), un trigger que impide aplicar más
+  de lo que tiene el pago o le falta al cargo y exige misma cuenta, un trigger
+  que impide que un período emitido vuelva a abierto, permisos de solo SELECT e
+  INSERT para `miclub_app` y RLS forzado en las cuatro tablas.
+- Emisión idempotente por índice único `(organization_id, account_id,
+  billing_period_id, type)` con `ON CONFLICT DO NOTHING`. Reemitir no duplica.
+- Aplicación FIFO como función pura (`allocateFifo`), con lock por cuenta
+  (`pg_advisory_xact_lock`) para que dos pagos simultáneos no se pisen. El saldo a
+  favor se aplica solo cuando se emiten cuotas nuevas.
+- Cuenta corriente derivada: estado de cada cargo, deuda, saldo a favor, vencido
+  y "al día / moroso". Nada de eso se guarda.
+- Rutas bajo `/api/v1` que exigen `req.tenant`. Como el middleware de auth no
+  existe todavía, hoy responden 401: nunca se toma el club de un header.
+- 13 tests unitarios nuevos y 19 de integración (flujo completo, idempotencia,
+  inmutabilidad, topes, aislamiento entre clubes y API por HTTP).
+
+Verificación hecha durante la sesión, contra Postgres 16 local:
+- Typecheck, build, tests unitarios (19) e integración (28, con los 9 de AID-010)
+  en verde. En este entorno el binario de Prisma estaba bloqueado: los tests de
+  integración corrieron con el motor WASM y el adaptador `pg`, con el mismo código
+  de la app. El CI corre con el motor normal.
+- Sacando el trigger de inmutabilidad, el de aplicaciones y la política RLS de
+  `charges`, fallan 6 tests: detectan la regresión.
+- Corrección durante la sesión: los triggers usaban SQLSTATE de clase 23, que
+  Prisma traduce a sus propios códigos y pierde el mensaje. Quedaron con el código
+  por defecto.
+
+**Validación y corrección humana**
+- _(A completar por Joaquín después de leer el código.)_ Puntos a validar:
+  - `account_id` no tiene FK porque la tabla de cuentas es del módulo de padrón
+    (Facundo). Acordar que su migración agregue la FK.
+  - La emisión recibe el monto de cada cuenta desde quien llama. Acordar con el
+    módulo de padrón cómo se calcula desde categoría y precio vigente.
+  - Confirmar la regla FIFO (pagos más viejos a cargos más viejos) con un club.
+  - Solo hay cargos `FEE` y `LATE_FEE`. Bonificaciones y anulaciones de cargos
+    quedan para contraasientos, antes de la defensa.
+  - Acordar con el módulo de Mercado Pago (Lucas) que el webhook registre el pago
+    y llame a `allocateOpenBalance`.
+
 ---
 
 ## Plantilla para nuevas entradas
