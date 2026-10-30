@@ -350,16 +350,16 @@ por request, test de aislamiento contra Postgres real y workflow de CI.
 - `withTenant(organizationId, fn)`: transacción con `SET LOCAL ROLE miclub_app` y
   `set_config('app.organization_id', id, true)`. El contexto muere con la
   transacción, lo que lo hace seguro con un pooler en modo transacción.
-- 9 tests de integración: lectura cruzada, falla cerrado sin tenant, inserción y
+- Tests de integración: lectura cruzada, falla cerrado sin tenant, inserción y
   modificación cruzadas, DELETE prohibido y que el contexto no sobreviva a la
-  transacción.
+  transacción (13 tras la revisión del PR).
 - `.github/workflows/backend-ci.yml`: Postgres 16 como servicio, typecheck, build,
   tests, migraciones, chequeo de drift entre schema y SQL, test de aislamiento.
 
 Verificación hecha durante la sesión, contra Postgres 16 local:
 - Todo el pipeline en el orden del workflow, en verde.
-- Desactivando RLS en `organization_memberships`, 3 tests fallan: el test detecta
-  la regresión.
+- Cada regresión hace fallar tests: desactivar RLS en `organization_memberships`,
+  darle `BYPASSRLS` al rol de runtime o devolverle `INSERT` sobre membresías.
 - La migración aplica con un usuario no superusuario con `CREATEROLE`, como el
   `postgres` de Supabase.
 - Hallazgo: con `FORCE ROW LEVEL SECURITY`, ese mismo usuario no puede insertar
@@ -367,10 +367,26 @@ Verificación hecha durante la sesión, contra Postgres 16 local:
   clubes desde la plataforma) van a necesitar un rol con `BYPASSRLS`.
 
 **Validación y corrección humana**
+- **Corregido (revisión de Luca Giordani en el PR #7):**
+  - La IA había dado `INSERT` sobre `organization_memberships` al rol de negocio,
+    con una política que solo exigía la organización propia. Un club podía
+    sumarse como miembro a cualquier usuario por su id y, por la política de
+    `users`, leer su email. Se verificó el ataque contra Postgres y se corrigió:
+    el rol no puede crear membresías ni cambiar su `user_id` u
+    `organization_id`; solo `role`, `updated_at` y `deleted_at`. El test cubre
+    los dos intentos.
+  - El test conectaba con el superusuario del contenedor. Las queries ya corrían
+    como `miclub_app` dentro de `withTenant`, pero no se probaba el rol real de
+    la API ni qué pasa con una query sin `withTenant`. Ahora hay un rol LOGIN de
+    runtime (`miclub_runtime`) sin `SUPERUSER` ni `BYPASSRLS`, separado del rol
+    de migraciones, y el test verifica sus atributos y que sin tenant no ve
+    filas. La migración ya no le concede `miclub_app` al usuario que migra.
 - _(A completar por Joaquín después de leer el código.)_ Puntos a validar:
   - Confirmar en el proyecto de Supabase si el rol `postgres` tiene `BYPASSRLS`
     (`select rolbypassrls from pg_roles where rolname = 'postgres'`) y decidir cómo
     se hacen las operaciones de plataforma.
+  - Crear el rol LOGIN de runtime en Supabase, miembro de `miclub_app`, y usarlo
+    en la `DATABASE_URL` de la API.
   - Confirmar que la API se conecta por el pooler de Supabase en modo transacción.
   - Revisar que nombrar el código en inglés (en lugar del español del CLAUDE.md
     original) sea la decisión del equipo.
