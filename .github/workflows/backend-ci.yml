@@ -1,0 +1,96 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main, development]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
+  # Corrida manual desde Actions, por si un PR queda sin CI (p. ej. tras un
+  # rebase mientras GitHub lo marcaba con conflictos y no disparó el workflow).
+  workflow_dispatch:
+
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Typecheck, build y tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      postgres:
+        image: postgres:16
+        # Base efímera del job: sin contraseña, solo accesible desde el runner.
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: miclub_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Rol que corre las migraciones (y el seed del test).
+      DATABASE_URL: postgresql://postgres@localhost:5432/miclub_test
+      # Rol con el que se conecta la API: LOGIN, sin SUPERUSER ni BYPASSRLS.
+      RUNTIME_DATABASE_URL: postgresql://miclub_runtime@localhost:5432/miclub_test
+      SHADOW_DATABASE_URL: postgresql://postgres@localhost:5432/miclub_shadow
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Validar schema de Prisma
+        run: npx prisma validate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Tests unitarios
+        run: npm test
+
+      - name: Aplicar migraciones
+        run: npm run prisma:migrate:deploy
+
+      - name: Verificar que schema.prisma y las migraciones coincidan
+        run: |
+          psql "postgresql://postgres@localhost:5432/postgres" -c "CREATE DATABASE miclub_shadow"
+          npx prisma migrate diff \
+            --from-migrations prisma/migrations \
+            --to-schema-datamodel prisma/schema.prisma \
+            --shadow-database-url "$SHADOW_DATABASE_URL" \
+            --exit-code
+
+      - name: Crear el rol de runtime de la API
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE miclub_runtime LOGIN NOSUPERUSER NOBYPASSRLS IN ROLE miclub_app"
+
+      - name: Test de aislamiento multi-tenant
+        run: npm run test:integration

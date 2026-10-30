@@ -8,7 +8,8 @@ Es además el **Trabajo Práctico Integrador** de *Ingeniería de Software en la
 cronograma están en el [doc 10](docs/10-entrega-academica.md); no son opcionales y
 condicionan el alcance.
 
-**Estado: Fase 0 — definición. Todavía no hay código.**
+**Estado: Fase 1 — MVP en construcción.** Hay backend base (Express + Prisma), schema
+multi-tenant con RLS y CI. El resto del dominio todavía no está implementado.
 
 Decidido hasta ahora:
 
@@ -49,8 +50,11 @@ Aplican a todo el código, sin excepción. Si algo las contradice, es un bug.
    son inmutables: se corrigen con contraasientos, nunca con `UPDATE`.
    Un tesorero que ve un número cambiar sin explicación deja de usar el producto.
 2. **Montos en enteros (centavos), nunca float.** Columna `bigint`, moneda explícita (`ARS`).
-3. **Todo query lleva `club_id`.** No hay lectura ni escritura sin tenant.
+3. **Todo query lleva tenant (`organization_id`).** No hay lectura ni escritura sin tenant.
    El aislamiento se garantiza en la base (RLS), no en el código de aplicación.
+   En el backend, toda query de negocio pasa por `withTenant`
+   (`backend/src/infrastructure/database/tenant.ts`), y toda tabla nueva con datos de
+   un club lleva su política RLS y un caso en el test de aislamiento.
 4. **Los webhooks son no confiables.** Llegan duplicados, desordenados o nunca.
    Todo handler es idempotente y existe un job de reconciliación que consulta a MP
    como fuente de verdad.
@@ -66,11 +70,14 @@ Aplican a todo el código, sin excepción. Si algo las contradice, es un bug.
 
 ## Convenciones
 
-- El dominio se nombra **en español** (`socio`, `cuota`, `cargo`, `periodo`).
-  El código de infraestructura, en inglés. No mezclar dentro de una misma capa.
+- El código (modelos, tablas, módulos) se nombra **en inglés**, siguiendo los módulos
+  de `backend/src/modules/` (`organizations`, `memberships`, `people`, `finance`…).
+  El tenant es `Organization` (un club). La documentación y los mensajes al usuario
+  siguen en español; el glosario del [doc 02](docs/02-glosario-y-dominio.md) es el
+  vocabulario de negocio.
 - Documentos numerados; si se agrega uno nuevo, se agrega también a esta tabla.
-- **Commits en Conventional Commits**, con el módulo del dominio como scope:
-  `feat(socios):`, `fix(cobranza):`, `feat(ia):`. Detalle en el [doc 10](docs/10-entrega-academica.md).
+- **Commits en Conventional Commits**, con el módulo como scope:
+  `feat(memberships):`, `fix(finance):`, `ci(backend):`. Detalle en el [doc 10](docs/10-entrega-academica.md).
 - Si un asistente de IA participó en una decisión de diseño o en código que llega a
   `main`, se agrega una entrada en [AI-DECISIONS.md](AI-DECISIONS.md).
 
