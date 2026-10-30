@@ -347,7 +347,7 @@ por request, test de aislamiento contra Postgres real y workflow de CI.
 - Migración `init_tenancy`: tablas generadas por Prisma más SQL escrito a mano con
   RLS forzado (`FORCE ROW LEVEL SECURITY`), rol `miclub_app` sin `BYPASSRLS` y sin
   permiso de DELETE, y la función `app_current_organization_id()`.
-- `withTenant(organizationId, fn)`: transacción con `SET LOCAL ROLE miclub_app` y
+- `withTenant(organizationId, fn)`: transacción con `SET LOCAL ROLE` y
   `set_config('app.organization_id', id, true)`. El contexto muere con la
   transacción, lo que lo hace seguro con un pooler en modo transacción.
 - 9 tests de integración: lectura cruzada, falla cerrado sin tenant, inserción y
@@ -374,6 +374,38 @@ Verificación hecha durante la sesión, contra Postgres 16 local:
   - Confirmar que la API se conecta por el pooler de Supabase en modo transacción.
   - Revisar que nombrar el código en inglés (en lugar del español del CLAUDE.md
     original) sea la decisión del equipo.
+
+---
+
+## AID-011 · Reglas puras para aplicación de pagos y saldo derivado
+
+**Fecha:** 2026-10-30 · **Responsable:** Joaquín · **Herramienta:** Codex
+
+**Problema abordado**
+El dominio exige que un pago manual se aplique a los cargos más antiguos primero y
+que el saldo sea una proyección del ledger, no un valor editable. El schema de
+cuentas todavía pertenece al módulo Padrón, por lo que persistir tablas de cobranza
+ahora duplicaría o anticiparía un contrato compartido.
+
+**Prompt / Herramienta**
+Implementar de manera autónoma los pendientes de M3 que no requieren credenciales,
+respetando el ledger inmutable y sin inventar la futura clave foránea de cuentas.
+
+**Salida de la IA**
+- Helper puro `allocatePaymentOldestFirst`: aplica centavos solo a cargos abiertos,
+  por vencimiento e id estable; un excedente queda como saldo a favor.
+- Helper `deriveBalanceCents`: calcula `cargos - aplicaciones`, admitiendo saldo a
+  favor negativo sin crear cargos negativos.
+- Tests para pago parcial, varios cargos, excedente, cargo anulado y valores
+  inconsistentes.
+
+**Validación y corrección humana**
+- Revisión técnica independiente asistida: confirmó que no existe la tabla de cuentas
+  en `development` ni en el PR #7, y que no debe inventarse una FK compartida.
+- Verificado automáticamente: typecheck, build y tests unitarios en verde.
+- **Pendiente antes de mergear:** una persona del equipo debe revisar la implementación
+  y confirmar que la tabla `accounts` del módulo Padrón expone el identificador y la
+  semántica esperados. No se declara validación humana completada sin esa revisión.
 
 ---
 
