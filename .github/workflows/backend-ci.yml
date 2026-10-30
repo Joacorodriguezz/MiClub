@@ -45,7 +45,10 @@ jobs:
           --health-retries 10
 
     env:
+      # Rol que corre las migraciones (y el seed del test).
       DATABASE_URL: postgresql://postgres@localhost:5432/miclub_test
+      # Rol con el que se conecta la API: LOGIN, sin SUPERUSER ni BYPASSRLS.
+      RUNTIME_DATABASE_URL: postgresql://miclub_runtime@localhost:5432/miclub_test
       SHADOW_DATABASE_URL: postgresql://postgres@localhost:5432/miclub_shadow
 
     steps:
@@ -83,6 +86,11 @@ jobs:
             --to-schema-datamodel prisma/schema.prisma \
             --shadow-database-url "$SHADOW_DATABASE_URL" \
             --exit-code
+
+      - name: Crear el rol de runtime de la API
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE miclub_runtime LOGIN NOSUPERUSER NOBYPASSRLS IN ROLE miclub_app"
 
       - name: Test de aislamiento multi-tenant
         run: npm run test:integration

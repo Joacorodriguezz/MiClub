@@ -12,10 +12,14 @@ export type TenantTransaction = Prisma.TransactionClient;
  * Ejecuta `fn` dentro de una transacción con el tenant fijado en Postgres.
  *
  * Asume el rol `miclub_app` y setea `app.organization_id`, ambos con alcance de
- * transacción (`SET LOCAL` / `set_config(..., true)`). Así el aislamiento lo
- * hacen cumplir las políticas RLS sin depender de con qué usuario se conectó la
- * API, y el contexto no sobrevive a la transacción: con un pooler en modo
- * transacción (Supavisor/PgBouncer) un request nunca hereda el tenant de otro.
+ * transacción (`SET LOCAL` / `set_config(..., true)`). El aislamiento lo hacen
+ * cumplir las políticas RLS, y el contexto no sobrevive a la transacción: con un
+ * pooler en modo transacción (Supavisor/PgBouncer) un request nunca hereda el
+ * tenant de otro.
+ *
+ * La API tiene que conectarse con un rol LOGIN sin SUPERUSER ni BYPASSRLS que
+ * sea miembro de `miclub_app` (ver la migración `init_tenancy`). Si no lo es,
+ * `SET LOCAL ROLE` falla y la query no corre.
  *
  * Toda query de negocio tiene que pasar por acá.
  */

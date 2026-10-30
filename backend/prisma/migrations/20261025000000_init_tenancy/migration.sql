@@ -73,8 +73,13 @@ CREATE FUNCTION "app_current_organization_id"() RETURNS UUID
     LANGUAGE sql STABLE
     AS $$ SELECT NULLIF(current_setting('app.organization_id', true), '')::uuid $$;
 
--- Rol de runtime para queries de negocio. Sin LOGIN y sin BYPASSRLS: la API
--- lo asume con `SET LOCAL ROLE` dentro de cada transacción con tenant.
+-- Rol con los permisos de negocio. Sin LOGIN y sin BYPASSRLS: la API lo asume
+-- con `SET LOCAL ROLE` dentro de cada transacción con tenant.
+--
+-- La API no se conecta con el usuario que corre las migraciones: se conecta con
+-- un rol LOGIN propio de cada ambiente, sin SUPERUSER ni BYPASSRLS, miembro de
+-- `miclub_app` (en CI, `miclub_runtime`). Ese rol no se crea acá porque sus
+-- credenciales son del ambiente, no del repo.
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'miclub_app') THEN
@@ -83,19 +88,17 @@ BEGIN
 END
 $$;
 
--- El usuario que corre las migraciones (y la API) tiene que poder asumirlo.
-DO $$
-BEGIN
-    EXECUTE format('GRANT "miclub_app" TO %I', current_user);
-END
-$$;
-
 GRANT USAGE ON SCHEMA "public" TO "miclub_app";
 GRANT EXECUTE ON FUNCTION "app_current_organization_id"() TO "miclub_app";
 
 -- Sin DELETE: nada se borra, las bajas son lógicas (`deleted_at`).
 GRANT SELECT, INSERT, UPDATE ON "organizations" TO "miclub_app";
-GRANT SELECT, INSERT, UPDATE ON "organization_memberships" TO "miclub_app";
+-- Las membresías se crean desde el flujo de invitación/plataforma, no desde un
+-- tenant: si el club pudiera insertarlas, se agregaría a cualquier usuario por
+-- su id y pasaría a ver su email (la política de `users` muestra a los
+-- miembros). Por la misma razón no puede cambiar `user_id` ni `organization_id`.
+GRANT SELECT ON "organization_memberships" TO "miclub_app";
+GRANT UPDATE ("role", "updated_at", "deleted_at") ON "organization_memberships" TO "miclub_app";
 -- Los usuarios se crean desde el flujo de auth/plataforma, no con un tenant.
 GRANT SELECT ON "users" TO "miclub_app";
 
@@ -113,7 +116,7 @@ CREATE POLICY "organizations_tenant_isolation" ON "organizations"
     USING ("id" = "app_current_organization_id"())
     WITH CHECK ("id" = "app_current_organization_id"());
 
--- Un tenant solo ve y escribe membresías de su organización.
+-- Un tenant solo ve y modifica membresías de su organización.
 CREATE POLICY "organization_memberships_tenant_isolation" ON "organization_memberships"
     FOR ALL TO "miclub_app"
     USING ("organization_id" = "app_current_organization_id"())
