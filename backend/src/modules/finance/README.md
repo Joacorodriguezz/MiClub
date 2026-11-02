@@ -1,12 +1,16 @@
 # Módulo: finance
 
-Deuda que una persona tiene con el club. Separar estrictamente:
+El ledger cobra sobre una **cuenta**, no directamente sobre una persona. Separa:
 
-- **FeePlan** = regla de cuánto debería pagar alguien.
-- **Charge**  = deuda concreta de una persona en un período (ej. Marzo 2027, PENDING).
+- **Charge**: deuda concreta y congelada, emitida para un período.
+- **Payment**: dinero recibido, manual o digital.
+- **PaymentApplication**: vínculo inmutable entre un pago y uno o más cargos.
 
-Los FeePlan podrán asociarse a Organization / Sport / Category / Team.
+La lógica pura de `ledger.ts` ya implementa dos reglas de dominio comprobables:
 
-No confundir Charge con Payment (movimiento real de dinero, en el módulo payments).
+- aplicación de pagos a los cargos abiertos de vencimiento más antiguo primero;
+- saldo derivado como `cargos - aplicaciones`, nunca como campo mutable.
 
-No implementado todavía.
+Todavía no hay persistencia ni endpoints: dependen de que el módulo Padrón defina y
+migre la cuenta de facturación compartida. Cuando exista, las transacciones deberán
+pasar por `withTenant` y guardar los asientos sin `UPDATE` ni `DELETE`.
