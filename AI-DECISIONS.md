@@ -429,6 +429,41 @@ ni Mercado Pago. Sin confirmar todavía qué rol usa `DATABASE_URL` en Render.
 
 ---
 
+## AID-012 · Frontend base que consulta /health y /ready
+
+**Fecha:** 2026-11-04 · **Responsable:** Luca Giordani · **Herramienta:** Cursor Grok 4.7
+
+**Problema abordado**
+El frontend era un cascarón: `package.json` sin dependencias, `index.html` sin punto
+de entrada y dos plantillas de entorno iguales. El checkpoint 2 pide una demo
+desplegable. Hacía falta una SPA mínima que muestre si la API está viva y si la
+base responde, leyendo la URL desde el entorno y sin hardcodearla.
+
+**Prompt / Herramienta**
+Cursor, paso 2 sobre `feat/backend-ready`. React + Vite + TypeScript, React Router,
+cliente de `VITE_API_URL`, una pantalla que consulte `/health` y `/ready`,
+`.env.example` y `vercel.json` solo si hacía falta. Sin login, sin padrón, sin
+cobranza y sin inventar la URL de Render.
+
+**Salida de la IA**
+- App en `src/app`, pantalla en `src/pages/StatusPage.tsx`, cliente en
+  `src/shared/api/client.ts`. Ruta `/` y un aviso en cualquier otra ruta.
+- `VITE_API_URL` vacía o que no sea http(s) se muestra en la pantalla; no hay URL
+  de producción escrita en el código. `.env.example` queda en `http://localhost:3000`
+  y se borró el duplicado `frontend/env.example`.
+- `vercel.json` ya reescribía a `index.html`. No se tocó.
+- El build sigue siendo `tsc -b && vite build`, con `tsconfig` partido en app y node
+  para que ese script typecheckee.
+
+**Validación y corrección humana**
+- **Pendiente:** Luca revisa el diff antes de commitear. Esta entrada no marca el
+  cambio como aceptado.
+- En Vercel hay que cargar `VITE_API_URL` con la URL real de Render, y en Render
+  `CORS_ORIGIN` tiene que incluir el origen del frontend. Esas URLs no están en el
+  repo.
+
+---
+
 ## Plantilla para nuevas entradas
 
 ```markdown

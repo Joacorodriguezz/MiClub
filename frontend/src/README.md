@@ -19,4 +19,5 @@ Carpetas:
 - `shared/` — components, hooks, api, utils, types realmente transversales.
 - `assets/` — estáticos.
 
-Nada implementado todavía.
+La raíz (`/`) consulta `GET /health` y `GET /ready` de la API usando `VITE_API_URL`.
+El resto de features y layouts sigue vacío.

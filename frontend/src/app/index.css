@@ -1,0 +1,127 @@
+:root {
+  color: #1c1917;
+  background: #f6f3ee;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.page {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 3rem;
+}
+
+h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.75rem;
+}
+
+h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-family: ui-monospace, monospace;
+}
+
+.lead,
+.api-url {
+  margin: 0.5rem 0 0;
+}
+
+code {
+  font-family: ui-monospace, monospace;
+  font-size: 0.92em;
+}
+
+a {
+  color: #1c1917;
+}
+
+button {
+  margin-top: 1rem;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid #1c1917;
+  border-radius: 0.4rem;
+  background: #1c1917;
+  color: #f6f3ee;
+  font: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.checks {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.card {
+  padding: 1rem;
+  border: 1px solid #e4ddd2;
+  border-radius: 0.6rem;
+  background: #fff;
+}
+
+.pill {
+  display: inline-block;
+  margin: 0.6rem 0 0;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.9rem;
+}
+
+.pill.ok {
+  background: #e5f6e8;
+  color: #14532d;
+}
+
+.pill.bad {
+  background: #fde8e8;
+  color: #991b1b;
+}
+
+.banner {
+  margin-top: 1rem;
+  padding: 0.8rem 1rem;
+  border-radius: 0.6rem;
+  background: #fde8e8;
+  color: #991b1b;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: 6rem 1fr;
+  gap: 0.2rem 0.75rem;
+  margin: 0.75rem 0 0;
+}
+
+dt {
+  color: #57534e;
+}
+
+dd {
+  margin: 0;
+  font-family: ui-monospace, monospace;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 40rem) {
+  .page {
+    padding-top: 1.5rem;
+  }
+
+  dl {
+    grid-template-columns: 1fr;
+  }
+}
