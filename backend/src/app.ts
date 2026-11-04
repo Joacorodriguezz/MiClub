@@ -7,6 +7,7 @@ import express, {
   type Response,
 } from 'express';
 import { buildCorsOptions } from './config/cors';
+import { createSessionRouter, type SessionAuth } from './modules/auth/router';
 
 /** Sonda de readiness. El default ejecuta `SELECT 1` contra DATABASE_URL. */
 export type ReadinessProbe = () => Promise<unknown>;
@@ -23,10 +24,13 @@ async function defaultReadinessProbe(): Promise<void> {
 /**
  * Construye la aplicación Express (sin rutas de negocio todavía).
  *
- * Los módulos de `src/modules/*` registrarán aquí sus routers más adelante.
+ * Los módulos de `src/modules/*` registran aquí sus routers.
  * No agregar lógica de dominio en este archivo.
  */
-export function createApp(options?: { readinessProbe?: ReadinessProbe }): Express {
+export function createApp(options?: {
+  readinessProbe?: ReadinessProbe;
+  auth?: SessionAuth;
+}): Express {
   const readinessProbe = options?.readinessProbe ?? defaultReadinessProbe;
   const app = express();
 
@@ -52,6 +56,8 @@ export function createApp(options?: { readinessProbe?: ReadinessProbe }): Expres
       res.status(503).json({ status: 'unavailable' });
     }
   });
+
+  app.use(createSessionRouter(options?.auth));
 
   app.use((_req: Request, res: Response) => {
     res.status(404).json({ error: 'Not Found' });

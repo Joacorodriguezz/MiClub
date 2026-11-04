@@ -464,6 +464,45 @@ cobranza y sin inventar la URL de Render.
 
 ---
 
+## AID-013 · Middleware de JWT y tenant con rol de runtime
+
+**Fecha:** 2026-11-04 · **Responsable:** Luca Giordani · **Herramienta:** Cursor Grok 4.7
+
+**Problema abordado**
+Había que validar el access token de Supabase Auth y fijar el club con `withTenant`,
+sin usar el rol que migra. En Render no se pudo confirmar `DATABASE_URL`. El doc de
+arquitectura dice que el navegador elige el club, pero la API solo lo acepta si el
+usuario es miembro, y que la conexión de la API no tiene `BYPASSRLS`. El rol de
+runtime no ve membresías hasta que el tenant está fijado: fijarlo antes de comprobar
+la membresía abriría ese club.
+
+**Prompt / Herramienta**
+Cursor, paso 3 sobre `feat/backend-ready`. Reusar `withTenant`. El middleware recibe
+un cliente armado como en el test de aislamiento (`RUNTIME_DATABASE_URL`). El test
+de integración falla si `current_user` es superuser o tiene `BYPASSRLS`. Sin login
+de frontend, sin Render y sin inventar un proyecto de Supabase.
+
+**Salida de la IA**
+- `GET /session` exige `Authorization: Bearer` y `X-Organization-Id`.
+- El JWT se verifica en HS256 con emisor `${SUPABASE_URL}/auth/v1`, audiencia
+  `authenticated`, vencimiento y `role = authenticated`. El email del token no se
+  copia a la request ni a la respuesta.
+- La membresía se consulta con `app_membership_role`, función `SECURITY DEFINER`
+  que devuelve solo el rol. Después el handler lee la organización con `withTenant`
+  y el cliente de runtime.
+- Si ese cliente es privilegiado, la respuesta es 503 y no se leen datos del club.
+- Sin `RUNTIME_DATABASE_URL` o sin secret, `/session` queda en 503. `/health` sigue
+  abierto. No hay project ref de Supabase en el repo.
+
+**Validación y corrección humana**
+- **Pendiente:** Luca revisa el diff antes de commitear. Esta entrada no marca el
+  cambio como aceptado.
+- Quien tenga Supabase tiene que crear el rol LOGIN miembro de `miclub_app`, sin
+  `SUPERUSER` ni `BYPASSRLS`, y cargar `RUNTIME_DATABASE_URL`, `SUPABASE_URL` y
+  `SUPABASE_JWT_SECRET` en el proceso de la API. `DATABASE_URL` no reemplaza eso.
+
+---
+
 ## Plantilla para nuevas entradas
 
 ```markdown
