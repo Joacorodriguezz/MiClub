@@ -7,7 +7,8 @@ services:
     name: miclub-api
     runtime: node
     rootDir: backend
-    buildCommand: npm install && npm run build && npx prisma generate
+    # `npm run build` ya corre `prebuild` (`prisma generate`). No repetirlo.
+    buildCommand: npm install && npm run build
     startCommand: npm start
     healthCheckPath: /health
     envVars:

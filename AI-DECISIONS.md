@@ -393,6 +393,42 @@ Verificación hecha durante la sesión, contra Postgres 16 local:
 
 ---
 
+## AID-011 · GET /ready y generate único en el build de Render
+
+**Fecha:** 2026-11-04 · **Responsable:** Luca Giordani · **Herramienta:** Cursor Grok 4.7
+
+**Problema abordado**
+`GET /health` no toca la base, a propósito: es el liveness de Render y tiene que
+responder aunque Postgres no esté. El checkpoint 2 pide un backend operativo contra
+la base. Faltaba un readiness check con `SELECT 1` y sacar el `prisma generate`
+duplicado del Blueprint (AID-009 lo había dejado afuera).
+
+**Prompt / Herramienta**
+Cursor, sobre `feat/backend-ready` (desde `origin/development`). Paso 1: `GET /ready`
+que ejecute `SELECT 1` (200 si responde, 503 si falla), test de integración, y
+quitar el `npx prisma generate` extra de `infra/render.yaml`. Sin padrón, cobranza
+ni Mercado Pago. Sin confirmar todavía qué rol usa `DATABASE_URL` en Render.
+
+**Salida de la IA**
+- `GET /ready` usa el cliente Prisma del proceso (`DATABASE_URL`) recién al atender
+  el request, para que `/health` siga levantando sin base. 200 `{ status: "ok" }`,
+  503 `{ status: "unavailable" }`. El cuerpo del 503 no incluye el error: Prisma
+  puede meter el connection string en el mensaje.
+- El 503 se prueba con una sonda inyectada (sin Postgres). El 200 de integración
+  no inyecta sonda: pega a `SELECT 1` real.
+- `buildCommand` de Render queda en `npm install && npm run build`. `prebuild` ya
+  corre `prisma generate`.
+- `healthCheckPath` sigue en `/health`.
+
+**Validación y corrección humana**
+- **Pendiente:** Luca revisa el diff antes de commitear. Esta entrada no marca el
+  cambio como aceptado.
+- El rol de `DATABASE_URL` en Render y en Supabase sigue sin confirmar. `/ready`
+  solo prueba que esa URL responde; no demuestra que sea el rol de runtime sin
+  `BYPASSRLS`. Eso queda para el middleware de auth.
+
+---
+
 ## Plantilla para nuevas entradas
 
 ```markdown

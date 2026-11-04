@@ -8,13 +8,26 @@ import express, {
 } from 'express';
 import { buildCorsOptions } from './config/cors';
 
+/** Sonda de readiness. El default ejecuta `SELECT 1` contra DATABASE_URL. */
+export type ReadinessProbe = () => Promise<unknown>;
+
+/**
+ * Carga el cliente Prisma solo al atender `/ready`, para que `/health` y los
+ * tests que no tocan la base puedan importar la app sin DATABASE_URL.
+ */
+async function defaultReadinessProbe(): Promise<void> {
+  const { checkDatabase } = await import('./infrastructure/database/readiness');
+  await checkDatabase();
+}
+
 /**
  * Construye la aplicación Express (sin rutas de negocio todavía).
  *
  * Los módulos de `src/modules/*` registrarán aquí sus routers más adelante.
  * No agregar lógica de dominio en este archivo.
  */
-export function createApp(): Express {
+export function createApp(options?: { readinessProbe?: ReadinessProbe }): Express {
+  const readinessProbe = options?.readinessProbe ?? defaultReadinessProbe;
   const app = express();
 
   // CORS antes del body parser: JSON inválido sigue respondiendo con headers CORS.
@@ -27,6 +40,17 @@ export function createApp(): Express {
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),
     });
+  });
+
+  // Readiness: la base responde. El error no se devuelve: puede incluir el DSN.
+  app.get('/ready', async (_req: Request, res: Response) => {
+    try {
+      await readinessProbe();
+      res.status(200).json({ status: 'ok' });
+    } catch {
+      console.error('GET /ready: la base no respondió');
+      res.status(503).json({ status: 'unavailable' });
+    }
   });
 
   app.use((_req: Request, res: Response) => {
