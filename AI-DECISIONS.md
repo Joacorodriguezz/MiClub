@@ -536,6 +536,41 @@ Sin inventar un project ref ni una anon key.
 
 ---
 
+## AID-015 · Pipeline de migraciones, Render y previews de Vercel
+
+**Fecha:** 2026-11-04 · **Responsable:** Luca Giordani · **Herramienta:** Cursor Grok 4.7
+
+**Problema abordado**
+El checkpoint pide migraciones aplicadas por el pipeline, la API desplegada y un
+preview de Vercel en cada PR. Backend CI ya migraba una Postgres efímera de tests.
+No hay URL de Render, project id de Vercel ni connection string de Supabase, y
+[`environments.md`](infra/environments.md) registra un solo ambiente, en la rama
+`development`. El doc académico dice que producción es `main`.
+
+**Prompt / Herramienta**
+Cursor, paso 5 sobre `feat/backend-ready`. Extender Actions para migrar, disparar
+Render y habilitar previews. Listar los secrets. No inventar URLs, DSN ni un
+resultado de deploy.
+
+**Salida de la IA**
+- En push a `development`, después de los tests, `prisma migrate deploy` usa
+  `MIGRATION_DATABASE_URL` y un POST al `RENDER_DEPLOY_HOOK_URL`. Esos valores no
+  se imprimen. Si falta alguno, el job avisa y no llama a la base ni a Render.
+- `main` no migra ni despliega. No hay una segunda base en el registro.
+- El frontend construye en PR y en `main`/`development`. El preview (PR) y el
+  publish del proyecto de Vercel (push a `development`) corren solo con
+  `VERCEL_TOKEN`, `VERCEL_ORG_ID` y `VERCEL_PROJECT_ID`. Sin ellos no hay URL.
+- El blueprint deja `autoDeploy: false` para que el hook corra después de migrar,
+  y declara las env de auth. El patrón de CORS de los previews no es un secreto.
+
+**Validación y corrección humana**
+- **Pendiente:** Luca revisa el diff antes de commitear. Esta entrada no marca el
+  cambio como aceptado.
+- Quien tenga las cuentas sigue el orden de [`infra/README.md`](infra/README.md).
+  Hasta entonces el workflow no desplegó nada.
+
+---
+
 ## Plantilla para nuevas entradas
 
 ```markdown
