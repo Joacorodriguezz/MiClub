@@ -503,6 +503,39 @@ de frontend, sin Render y sin inventar un proyecto de Supabase.
 
 ---
 
+## AID-014 · Login de Supabase y token hacia la API
+
+**Fecha:** 2026-11-04 · **Responsable:** Luca Giordani · **Herramienta:** Cursor Grok 4.7
+
+**Problema abordado**
+El backend ya valida el access token y el club en `GET /session`. Faltaba la
+pantalla para que un administrador inicie sesión con Supabase Auth y mande ese
+token. No hay proyecto de Supabase cargado: las variables pueden estar vacías o
+en el placeholder del ejemplo.
+
+**Prompt / Herramienta**
+Cursor, paso 4 sobre `feat/backend-ready`. Login en el frontend y envío del token
+al backend, aunque `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` estén vacías.
+Sin inventar un project ref ni una anon key.
+
+**Salida de la IA**
+- Ruta `/ingresar`: email, contraseña e id del club.
+- Si falta la config, o sigue el placeholder `YOUR_PROJECT` / `your-anon-key`, la
+  pantalla avisa y no crea el cliente de Supabase.
+- Con config, `signInWithPassword` y después `GET /session` con
+  `Authorization: Bearer` y `X-Organization-Id`. La pantalla muestra el id del
+  club y el rol. No muestra el token ni repite el email.
+- La contraseña se borra del estado al enviar el formulario.
+
+**Validación y corrección humana**
+- **Pendiente:** Luca revisa el diff antes de commitear. Esta entrada no marca el
+  cambio como aceptado.
+- Para probarlo contra el proyecto real hay que completar `.env.local` con la URL
+  y la anon key de Supabase, y `VITE_API_URL` con la API. Esos valores no están
+  en el repo.
+
+---
+
 ## Plantilla para nuevas entradas
 
 ```markdown

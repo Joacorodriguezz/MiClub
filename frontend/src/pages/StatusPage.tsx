@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { getApiCheck, readApiUrl, type ApiCheck } from '../shared/api/client';
 
 type CheckState =
@@ -39,6 +40,9 @@ export function StatusPage() {
     <main className="page">
       <h1>MiClub</h1>
       <p className="lead">Estado de la API. Esta pantalla no pide datos de socios.</p>
+      <p className="nav">
+        <Link to="/ingresar">Entrar</Link>
+      </p>
 
       {apiUrl ? (
         <>

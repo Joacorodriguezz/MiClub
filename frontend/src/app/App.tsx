@@ -1,4 +1,5 @@
 import { BrowserRouter, Link, Route, Routes } from 'react-router-dom';
+import { LoginPage } from '../pages/LoginPage';
 import { StatusPage } from '../pages/StatusPage';
 
 export function App() {
@@ -6,6 +7,7 @@ export function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<StatusPage />} />
+        <Route path="/ingresar" element={<LoginPage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>
