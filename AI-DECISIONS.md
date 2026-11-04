@@ -393,6 +393,247 @@ Verificación hecha durante la sesión, contra Postgres 16 local:
 
 ---
 
+## AID-011 · GET /ready y generate único en el build de Render
+
+**Fecha:** 2026-11-04 · **Responsable:** Luca Giordani · **Herramienta:** Cursor Grok 4.7
+
+**Problema abordado**
+`GET /health` no toca la base, a propósito: es el liveness de Render y tiene que
+responder aunque Postgres no esté. El checkpoint 2 pide un backend operativo contra
+la base. Faltaba un readiness check con `SELECT 1` y sacar el `prisma generate`
+duplicado del Blueprint (AID-009 lo había dejado afuera).
+
+**Prompt / Herramienta**
+Cursor, sobre `feat/backend-ready` (desde `origin/development`). Paso 1: `GET /ready`
+que ejecute `SELECT 1` (200 si responde, 503 si falla), test de integración, y
+quitar el `npx prisma generate` extra de `infra/render.yaml`. Sin padrón, cobranza
+ni Mercado Pago. Sin confirmar todavía qué rol usa `DATABASE_URL` en Render.
+
+**Salida de la IA**
+- `GET /ready` usa el cliente Prisma del proceso (`DATABASE_URL`) recién al atender
+  el request, para que `/health` siga levantando sin base. 200 `{ status: "ok" }`,
+  503 `{ status: "unavailable" }`. El cuerpo del 503 no incluye el error: Prisma
+  puede meter el connection string en el mensaje.
+- El 503 se prueba con una sonda inyectada (sin Postgres). El 200 de integración
+  no inyecta sonda: pega a `SELECT 1` real.
+- `buildCommand` de Render queda en `npm install && npm run build`. `prebuild` ya
+  corre `prisma generate`.
+- `healthCheckPath` sigue en `/health`.
+
+**Validación y corrección humana**
+- **Pendiente:** Luca revisa el diff antes de commitear. Esta entrada no marca el
+  cambio como aceptado.
+- El rol de `DATABASE_URL` en Render y en Supabase sigue sin confirmar. `/ready`
+  solo prueba que esa URL responde; no demuestra que sea el rol de runtime sin
+  `BYPASSRLS`. Eso queda para el middleware de auth.
+
+---
+
+## AID-012 · Frontend base que consulta /health y /ready
+
+**Fecha:** 2026-11-04 · **Responsable:** Luca Giordani · **Herramienta:** Cursor Grok 4.7
+
+**Problema abordado**
+El frontend era un cascarón: `package.json` sin dependencias, `index.html` sin punto
+de entrada y dos plantillas de entorno iguales. El checkpoint 2 pide una demo
+desplegable. Hacía falta una SPA mínima que muestre si la API está viva y si la
+base responde, leyendo la URL desde el entorno y sin hardcodearla.
+
+**Prompt / Herramienta**
+Cursor, paso 2 sobre `feat/backend-ready`. React + Vite + TypeScript, React Router,
+cliente de `VITE_API_URL`, una pantalla que consulte `/health` y `/ready`,
+`.env.example` y `vercel.json` solo si hacía falta. Sin login, sin padrón, sin
+cobranza y sin inventar la URL de Render.
+
+**Salida de la IA**
+- App en `src/app`, pantalla en `src/pages/StatusPage.tsx`, cliente en
+  `src/shared/api/client.ts`. Ruta `/` y un aviso en cualquier otra ruta.
+- `VITE_API_URL` vacía o que no sea http(s) se muestra en la pantalla; no hay URL
+  de producción escrita en el código. `.env.example` queda en `http://localhost:3000`
+  y se borró el duplicado `frontend/env.example`.
+- `vercel.json` ya reescribía a `index.html`. No se tocó.
+- El build sigue siendo `tsc -b && vite build`, con `tsconfig` partido en app y node
+  para que ese script typecheckee.
+
+**Validación y corrección humana**
+- **Pendiente:** Luca revisa el diff antes de commitear. Esta entrada no marca el
+  cambio como aceptado.
+- En Vercel hay que cargar `VITE_API_URL` con la URL real de Render, y en Render
+  `CORS_ORIGIN` tiene que incluir el origen del frontend. Esas URLs no están en el
+  repo.
+
+---
+
+## AID-013 · Middleware de JWT y tenant con rol de runtime
+
+**Fecha:** 2026-11-04 · **Responsable:** Luca Giordani · **Herramienta:** Cursor Grok 4.7
+
+**Problema abordado**
+Había que validar el access token de Supabase Auth y fijar el club con `withTenant`,
+sin usar el rol que migra. En Render no se pudo confirmar `DATABASE_URL`. El doc de
+arquitectura dice que el navegador elige el club, pero la API solo lo acepta si el
+usuario es miembro, y que la conexión de la API no tiene `BYPASSRLS`. El rol de
+runtime no ve membresías hasta que el tenant está fijado: fijarlo antes de comprobar
+la membresía abriría ese club.
+
+**Prompt / Herramienta**
+Cursor, paso 3 sobre `feat/backend-ready`. Reusar `withTenant`. El middleware recibe
+un cliente armado como en el test de aislamiento (`RUNTIME_DATABASE_URL`). El test
+de integración falla si `current_user` es superuser o tiene `BYPASSRLS`. Sin login
+de frontend, sin Render y sin inventar un proyecto de Supabase.
+
+**Salida de la IA**
+- `GET /session` exige `Authorization: Bearer` y `X-Organization-Id`.
+- El JWT se verifica en HS256 con emisor `${SUPABASE_URL}/auth/v1`, audiencia
+  `authenticated`, vencimiento y `role = authenticated`. El email del token no se
+  copia a la request ni a la respuesta.
+- La membresía se consulta con `app_membership_role`, función `SECURITY DEFINER`
+  que devuelve solo el rol. Después el handler lee la organización con `withTenant`
+  y el cliente de runtime.
+- Si ese cliente es privilegiado, la respuesta es 503 y no se leen datos del club.
+- Sin `RUNTIME_DATABASE_URL` o sin secret, `/session` queda en 503. `/health` sigue
+  abierto. No hay project ref de Supabase en el repo.
+
+**Validación y corrección humana**
+- **Pendiente:** Luca revisa el diff antes de commitear. Esta entrada no marca el
+  cambio como aceptado.
+- Quien tenga Supabase tiene que crear el rol LOGIN miembro de `miclub_app`, sin
+  `SUPERUSER` ni `BYPASSRLS`, y cargar `RUNTIME_DATABASE_URL`, `SUPABASE_URL` y
+  `SUPABASE_JWT_SECRET` en el proceso de la API. `DATABASE_URL` no reemplaza eso.
+
+---
+
+## AID-014 · Login de Supabase y token hacia la API
+
+**Fecha:** 2026-11-04 · **Responsable:** Luca Giordani · **Herramienta:** Cursor Grok 4.7
+
+**Problema abordado**
+El backend ya valida el access token y el club en `GET /session`. Faltaba la
+pantalla para que un administrador inicie sesión con Supabase Auth y mande ese
+token. No hay proyecto de Supabase cargado: las variables pueden estar vacías o
+en el placeholder del ejemplo.
+
+**Prompt / Herramienta**
+Cursor, paso 4 sobre `feat/backend-ready`. Login en el frontend y envío del token
+al backend, aunque `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` estén vacías.
+Sin inventar un project ref ni una anon key.
+
+**Salida de la IA**
+- Ruta `/ingresar`: email, contraseña e id del club.
+- Si falta la config, o sigue el placeholder `YOUR_PROJECT` / `your-anon-key`, la
+  pantalla avisa y no crea el cliente de Supabase.
+- Con config, `signInWithPassword` y después `GET /session` con
+  `Authorization: Bearer` y `X-Organization-Id`. La pantalla muestra el id del
+  club y el rol. No muestra el token ni repite el email.
+- La contraseña se borra del estado al enviar el formulario.
+
+**Validación y corrección humana**
+- **Pendiente:** Luca revisa el diff antes de commitear. Esta entrada no marca el
+  cambio como aceptado.
+- Para probarlo contra el proyecto real hay que completar `.env.local` con la URL
+  y la anon key de Supabase, y `VITE_API_URL` con la API. Esos valores no están
+  en el repo.
+
+---
+
+## AID-015 · Pipeline de migraciones, Render y previews de Vercel
+
+**Fecha:** 2026-11-04 · **Responsable:** Luca Giordani · **Herramienta:** Cursor Grok 4.7
+
+**Problema abordado**
+El checkpoint pide migraciones aplicadas por el pipeline, la API desplegada y un
+preview de Vercel en cada PR. Backend CI ya migraba una Postgres efímera de tests.
+No hay URL de Render, project id de Vercel ni connection string de Supabase, y
+[`environments.md`](infra/environments.md) registra un solo ambiente, en la rama
+`development`. El doc académico dice que producción es `main`.
+
+**Prompt / Herramienta**
+Cursor, paso 5 sobre `feat/backend-ready`. Extender Actions para migrar, disparar
+Render y habilitar previews. Listar los secrets. No inventar URLs, DSN ni un
+resultado de deploy.
+
+**Salida de la IA**
+- En push a `development`, después de los tests, `prisma migrate deploy` usa
+  `MIGRATION_DATABASE_URL` y un POST al `RENDER_DEPLOY_HOOK_URL`. Esos valores no
+  se imprimen. Si falta alguno, el job avisa y no llama a la base ni a Render.
+- `main` no migra ni despliega. No hay una segunda base en el registro.
+- El frontend construye en PR y en `main`/`development`. El preview (PR) y el
+  publish del proyecto de Vercel (push a `development`) corren solo con
+  `VERCEL_TOKEN`, `VERCEL_ORG_ID` y `VERCEL_PROJECT_ID`. Sin ellos no hay URL.
+- El blueprint deja `autoDeploy: false` para que el hook corra después de migrar,
+  y declara las env de auth. El patrón de CORS de los previews no es un secreto.
+
+**Validación y corrección humana**
+- **Pendiente:** Luca revisa el diff antes de commitear. Esta entrada no marca el
+  cambio como aceptado.
+- Quien tenga las cuentas sigue el orden de [`infra/README.md`](infra/README.md).
+  Hasta entonces el workflow no desplegó nada.
+
+---
+
+## AID-016 · Logs estructurados con club_id y sin datos personales
+
+**Fecha:** 2026-11-04 · **Responsable:** Luca Giordani · **Herramienta:** Cursor Grok 4.7
+
+**Problema abordado**
+El TPI pide una línea de log con `club_id` y sin datos personales, tokens ni el
+contenido de un archivo importado. El proceso escribía texto con `console`, y el
+fallo de `/ready` podía terminar registrando el error de la base.
+
+**Prompt / Herramienta**
+Cursor, paso 6 sobre `feat/backend-ready`. Log estructurado con el id del club y
+sin DNI, nombre ni email. Sin Sentry: eso es el paso siguiente.
+
+**Salida de la IA**
+- Cada evento es una línea JSON. `club_id` está siempre; es null si no hay un
+  UUID. El valor es el `organization_id` del tenant. El campo se llama `club_id`
+  porque así lo nombra la observabilidad del TPI. El schema no se renombra.
+- El logger solo copia nivel, mensaje, request id, club, método, path, status y
+  duración. Un email, un nombre, un DNI o un token que llegue como campo extra
+  no se serializa. El path se guarda sin query. Un email o un `Bearer` dentro
+  del mensaje se reemplaza.
+- El header de club se loguea solo si es un UUID. `/ready` registra que la base
+  no respondió, sin el error original.
+
+**Validación y corrección humana**
+- **Pendiente:** Luca revisa el diff antes de commitear. Esta entrada no marca el
+  cambio como aceptado.
+
+---
+
+## AID-017 · Sentry en la API y en el frontend, DSN por entorno
+
+**Fecha:** 2026-11-04 · **Responsable:** Luca Giordani · **Herramienta:** Cursor Grok 4.7
+
+**Problema abordado**
+El TPI pide los errores en Sentry, agrupados por módulo. No hay organización ni
+DSN de Sentry. El login pide email y contraseña: un SDK con breadcrumbs, replay
+o variables locales se los llevaría.
+
+**Prompt / Herramienta**
+Cursor, paso 7 sobre `feat/backend-ready`. Sentry en backend y frontend con el
+DSN desde el entorno. Sin inventar un DSN ni un proyecto.
+
+**Salida de la IA**
+- `SENTRY_DSN` y `VITE_SENTRY_DSN`. Vacío, http, o un placeholder con `YOUR_`:
+  el SDK no arranca y no hay llamada de red.
+- El backend no carga las integraciones por defecto (nada de HTTP, Prisma ni
+  variables locales). El evento sale sin usuario, request, breadcrumbs ni
+  `server_name`. Email, Bearer y URLs de Postgres del mensaje se reemplazan.
+- El tag `module` sale de la ruta (`platform`, `auth`, o el primer segmento) y
+  el fingerprint lo incluye. `club_id` solo si el header es un UUID. No se
+  reportan los 4xx.
+- El frontend no activa replay ni tracing. El diálogo de Sentry, que pide
+  nombre y email, queda apagado. El DSN del browser va en Vercel, no en Actions.
+
+**Validación y corrección humana**
+- **Pendiente:** Luca revisa el diff antes de commitear. Esta entrada no marca el
+  cambio como aceptado.
+- Quien tenga la cuenta de Sentry sigue el orden de [`infra/README.md`](infra/README.md).
+  Hasta entonces no se envió ningún evento.
+
+---
+
 ## Plantilla para nuevas entradas
 
 ```markdown

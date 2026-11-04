@@ -5,10 +5,12 @@ on:
     branches: [main, development]
     paths:
       - 'backend/**'
+      - 'infra/render.yaml'
       - '.github/workflows/backend-ci.yml'
   pull_request:
     paths:
       - 'backend/**'
+      - 'infra/render.yaml'
       - '.github/workflows/backend-ci.yml'
   # Corrida manual desde Actions, por si un PR queda sin CI (p. ej. tras un
   # rebase mientras GitHub lo marcaba con conflictos y no disparó el workflow).
@@ -16,7 +18,9 @@ on:
 
 concurrency:
   group: backend-ci-${{ github.ref }}
-  cancel-in-progress: true
+  # En development este workflow también migra la base del ambiente y dispara
+  # Render. Cancelarlo a mitad dejaría el esquema a medias. Los PR sí se cancelan.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/development' }}
 
 jobs:
   backend:
@@ -75,6 +79,8 @@ jobs:
       - name: Tests unitarios
         run: npm test
 
+      # Base efímera del job. La base del ambiente se migra en el job siguiente,
+      # solo en un push a development y con MIGRATION_DATABASE_URL.
       - name: Aplicar migraciones
         run: npm run prisma:migrate:deploy
 
@@ -94,3 +100,62 @@ jobs:
 
       - name: Test de aislamiento multi-tenant
         run: npm run test:integration
+
+  deploy-api:
+    name: Migrar y desplegar la API
+    needs: backend
+    if: github.event_name == 'push' && github.ref == 'refs/heads/development'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Migrar la base del ambiente y disparar Render
+        env:
+          MIGRATION_DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MIGRATION_DATABASE_URL}" ] || [ -z "${RENDER_DEPLOY_HOOK_URL}" ]; then
+            echo "::warning::No se migró ni se desplegó. Faltan MIGRATION_DATABASE_URL o RENDER_DEPLOY_HOOK_URL."
+            {
+              echo "### API sin desplegar"
+              echo "Los tests de este workflow pasaron. Faltan \`MIGRATION_DATABASE_URL\` o \`RENDER_DEPLOY_HOOK_URL\`."
+              echo "No se aplicó ninguna migración fuera de la base efímera del job de tests, y no se llamó a Render."
+              echo "Los pasos para cargarlos están en \`infra/README.md\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "Aplicando migraciones con el rol de migración. La URL no se imprime."
+          DATABASE_URL="${MIGRATION_DATABASE_URL}" npx prisma migrate deploy
+
+          echo "Disparando el deploy de Render."
+          code="$(curl --silent --output /dev/null --write-out "%{http_code}" --request POST --max-time 60 "${RENDER_DEPLOY_HOOK_URL}" || true)"
+          case "${code}" in
+            2[0-9][0-9]) ;;
+            *)
+              echo "::error::Render respondió HTTP ${code:-sin respuesta}. El cuerpo no se imprime."
+              exit 1
+              ;;
+          esac
+          echo "Render aceptó el deploy (HTTP ${code})."
+          {
+            echo "### API"
+            echo "Migraciones aplicadas. Render aceptó el deploy (HTTP ${code})."
+            echo "La URL del servicio queda en el dashboard de Render."
+          } >> "$GITHUB_STEP_SUMMARY"

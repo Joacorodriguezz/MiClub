@@ -64,6 +64,27 @@ se valida en CP2 con schema y migraciones.
 **Backup (CP1):** Supabase Free incluye backups diarios gestionados (retención limitada por
 plan). Política formal de RPO/RTO se define en CP2 al tener datos de negocio.
 
+### Secrets de GitHub Actions
+
+Nombres nada más. Los valores viven en GitHub → Settings → Secrets and variables →
+Actions. El procedimiento está en [`README.md`](README.md).
+
+| Secret | Ambiente que toca | Estado |
+|---|---|---|
+| `MIGRATION_DATABASE_URL` | Base de `miclub-dev`, solo desde Actions | _(cargar)_ |
+| `RENDER_DEPLOY_HOOK_URL` | Servicio `miclub-api` | _(cargar)_ |
+| `VERCEL_TOKEN` | Proyecto `miclub-frontend` | _(cargar)_ |
+| `VERCEL_ORG_ID` | Proyecto `miclub-frontend` | _(cargar)_ |
+| `VERCEL_PROJECT_ID` | Proyecto `miclub-frontend` | _(cargar)_ |
+
+`main` no tiene secrets propios: no hay un segundo proyecto en este registro, y el
+pipeline no lo despliega.
+
+### Sentry
+
+No es un secret de GitHub Actions. `SENTRY_DSN` vive en Render. `VITE_SENTRY_DSN`
+vive en Vercel (Preview y Production). Los dos vacíos hasta que exista el proyecto.
+
 ## Comprobaciones mínimas
 
 Ejecutar tras provisionar (o usar [`verify-setup.sh`](verify-setup.sh)):

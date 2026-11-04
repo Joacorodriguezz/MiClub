@@ -19,4 +19,6 @@ Carpetas:
 - `shared/` — components, hooks, api, utils, types realmente transversales.
 - `assets/` — estáticos.
 
-Nada implementado todavía.
+La raíz (`/`) consulta `GET /health` y `GET /ready` usando `VITE_API_URL`.
+`/ingresar` inicia sesión con Supabase Auth y manda el access token a `GET /session`.
+Si `VITE_SUPABASE_URL` o `VITE_SUPABASE_ANON_KEY` están vacías o en el placeholder, no llama a Supabase.

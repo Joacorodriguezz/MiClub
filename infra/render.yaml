@@ -7,15 +7,33 @@ services:
     name: miclub-api
     runtime: node
     rootDir: backend
-    buildCommand: npm install && npm run build && npx prisma generate
+    # `npm run build` ya corre `prebuild` (`prisma generate`). No repetirlo.
+    buildCommand: npm install && npm run build
     startCommand: npm start
     healthCheckPath: /health
+    # El push no despliega solo: Actions migra y después pega al deploy hook.
+    # Hay que crear ese hook en el dashboard y apagar el auto-deploy, o sincronizar este blueprint.
+    autoDeploy: false
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: "3000"
+      # SELECT 1 de GET /ready. No es la URL con la que Actions corre las migraciones.
       - key: DATABASE_URL
+        sync: false
+      # Auth y withTenant. Rol LOGIN, sin SUPERUSER ni BYPASSRLS, miembro de miclub_app.
+      - key: RUNTIME_DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      # Errores de la API. Vacío: el proceso arranca igual y no llama a Sentry.
+      - key: SENTRY_DSN
         sync: false
       - key: CORS_ORIGIN
         sync: false
+      # Previews de Vercel: un hostname distinto por PR. No es un secreto.
+      - key: CORS_ORIGIN_PATTERN
+        value: "^https://[a-z0-9-]+\\.vercel\\.app$"

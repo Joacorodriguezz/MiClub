@@ -2,7 +2,8 @@ import { PrismaClient } from '@prisma/client';
 
 /**
  * Cliente Prisma de proceso. Lee DATABASE_URL del entorno.
- * No se importa desde el health check: el proceso puede levantar sin DB.
+ * GET /health no lo importa: el proceso puede levantar sin DB.
+ * GET /ready lo carga recién cuando llega el request.
  */
 const globalForPrisma = globalThis as typeof globalThis & { prisma?: PrismaClient };
 

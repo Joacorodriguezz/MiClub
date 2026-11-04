@@ -1,0 +1,99 @@
+name: Frontend CI
+
+on:
+  push:
+    branches: [main, development]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-ci.yml'
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-ci.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: frontend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+  deploy-frontend:
+    name: Publicar en Vercel
+    needs: frontend
+    # Un dispatch manual solo construye. No publica el SHA que esté seleccionado.
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/development')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Publicar preview o el ambiente development
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "${VERCEL_TOKEN}" ] || [ -z "${VERCEL_ORG_ID}" ] || [ -z "${VERCEL_PROJECT_ID}" ]; then
+            echo "::warning::No se publicó en Vercel. Faltan VERCEL_TOKEN, VERCEL_ORG_ID o VERCEL_PROJECT_ID."
+            {
+              echo "### Frontend sin publicar"
+              echo "El build pasó. Faltan \`VERCEL_TOKEN\`, \`VERCEL_ORG_ID\` o \`VERCEL_PROJECT_ID\`."
+              echo "No se llamó a Vercel y no hay URL de preview en este job."
+              echo "Los pasos para cargarlos están en \`infra/README.md\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          npm install --global vercel@65.11.0
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+            vercel pull --yes --environment=preview --token="${VERCEL_TOKEN}"
+            vercel build --token="${VERCEL_TOKEN}"
+            vercel deploy --prebuilt --token="${VERCEL_TOKEN}"
+            destino="preview"
+          else
+            vercel pull --yes --environment=production --token="${VERCEL_TOKEN}"
+            vercel build --prod --token="${VERCEL_TOKEN}"
+            vercel deploy --prebuilt --prod --token="${VERCEL_TOKEN}"
+            destino="production del proyecto de development"
+          fi
+          {
+            echo "### Frontend"
+            echo "Vercel publicó (${destino}). La URL que devolvió el CLI queda en el log de este step."
+          } >> "$GITHUB_STEP_SUMMARY"

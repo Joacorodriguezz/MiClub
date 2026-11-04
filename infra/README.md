@@ -45,16 +45,58 @@ Referencia: [Deploy Node Express on Render](https://render.com/docs/deploy-node-
 1. En Vercel: **Add New → Project** → importar el repo.
 2. **Root Directory:** `frontend`
 3. **Framework Preset:** Vite
-4. **Build Command:** `npm run build` *(cuando existan dependencias)*
+4. **Build Command:** `npm run build`
 5. **Output Directory:** `dist`
-6. El archivo [`frontend/vercel.json`](../frontend/vercel.json) configura el rewrite
-   SPA hacia `index.html`.
-7. Variables de entorno: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_API_URL`.
-8. Registrar la URL pública en [`environments.md`](environments.md).
+6. El archivo [`frontend/vercel.json`](../frontend/vercel.json) fija el build de Vite
+   (`npm run build`, salida `dist`) y el rewrite SPA hacia `index.html`.
+7. Si el repo también queda conectado a Git, apagar los deploys automáticos de
+   Vercel: el preview lo publica Actions.
+8. Variables de entorno del proyecto (Preview y Production), no de GitHub:
+   `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_API_URL`.
+9. Registrar la URL pública en [`environments.md`](environments.md) cuando exista.
 
 Referencia: [Vite on Vercel](https://vercel.com/docs/frameworks/frontend/vite).
 
-## 4. Verificación del checkpoint 01
+## 4. Pipeline (GitHub Actions)
+
+Los workflows no tienen URLs ni connection strings. Si falta un secret, el job
+avisa y no llama al proveedor. Eso no es un deploy.
+
+Orden, cuando alguien tenga las cuentas:
+
+1. En Supabase, copiar la connection string **directa** (puerto 5432, no el pooler
+   6543) del rol que puede aplicar DDL. Ese rol no es `miclub_runtime`.
+2. En GitHub → Settings → Secrets and variables → Actions, crear
+   `MIGRATION_DATABASE_URL` con esa URL. No pegarla en Render ni en el repo.
+3. En Render, abrir `miclub-api` y desactivar **Auto-Deploy** (sincronizar
+   [`render.yaml`](render.yaml) también lo deja en `false`).
+4. En el mismo servicio, crear un **Deploy Hook** y guardarlo como secret
+   `RENDER_DEPLOY_HOOK_URL`. No commitearlo.
+5. En Render, completar los valores que el blueprint deja en el dashboard:
+   `DATABASE_URL` (alcanza para el `SELECT 1` de `/ready`; puede ser el rol de
+   runtime), `RUNTIME_DATABASE_URL` (LOGIN, sin `SUPERUSER` ni `BYPASSRLS`,
+   miembro de `miclub_app`), `SUPABASE_URL`, `SUPABASE_JWT_SECRET` (JWT secret,
+   no la anon key, 32 caracteres o más), `CORS_ORIGIN` (la URL estable del
+   frontend, sin barra final). `CORS_ORIGIN_PATTERN` ya viene en el blueprint
+   para los previews `*.vercel.app`.
+6. En Vercel, crear un token y anotar el **Org ID** y el **Project ID** del
+   proyecto con root `frontend`. Cargarlos como `VERCEL_TOKEN`, `VERCEL_ORG_ID`
+   y `VERCEL_PROJECT_ID`.
+7. Recién ahí, un push a `development` corre los tests, aplica
+   `prisma migrate deploy` y pega al hook. Un PR que toca `frontend/` construye
+   y, con esos secrets, publica un preview. `main` no migra ni despliega: en
+   [`environments.md`](environments.md) hay un solo ambiente y su rama es
+   `development`.
+
+| Secret de Actions | Lo usa |
+|---|---|
+| `MIGRATION_DATABASE_URL` | `prisma migrate deploy` contra la base del ambiente |
+| `RENDER_DEPLOY_HOOK_URL` | POST al hook después de migrar |
+| `VERCEL_TOKEN` | CLI de Vercel |
+| `VERCEL_ORG_ID` | CLI de Vercel |
+| `VERCEL_PROJECT_ID` | CLI de Vercel |
+
+## 5. Verificación del checkpoint 01
 
 | Entregable | Cómo comprobarlo |
 |---|---|
@@ -77,12 +119,22 @@ chmod +x infra/verify-setup.sh
 | [`environments.md`](environments.md) | Decisiones de despliegue, URLs y proyectos (sin secretos) |
 | [`verify-setup.sh`](verify-setup.sh) | Comprobación mínima post-provisión (`/health` + frontend HTTPS) |
 | [`README.md`](README.md) | Este procedimiento |
+| [`.github/workflows/backend-ci.yml`](../.github/workflows/backend-ci.yml) | Tests de la API y, en `development`, migración + deploy hook |
+| [`.github/workflows/frontend-ci.yml`](../.github/workflows/frontend-ci.yml) | Build del frontend y publish a Vercel |
 
-## Fuera de alcance del checkpoint 01
+## 6. Sentry
 
-- CI/CD con GitHub Actions
-- Migraciones Prisma, RLS y tests de aislamiento
+No hay un DSN en el repo. Con la variable vacía el SDK no arranca.
+
+1. Crear un proyecto de Sentry para Node y otro para el browser. Pueden ser el mismo proyecto si se prefiere un solo DSN.
+2. En Render, cargar `SENTRY_DSN` en `miclub-api`. No pegarlo en GitHub Actions ni en el repo.
+3. En Vercel, cargar `VITE_SENTRY_DSN` en Preview y Production. Vite lo incrusta en el build; por eso va en el proyecto de Vercel, no en un secret de Actions.
+4. El backend manda el error con el tag `module` (`platform`, `auth`, o el primer segmento del path) y `club_id` si el header es un UUID. No manda usuario, headers, body ni variables locales.
+
+## Fuera de alcance
+
 - Worker, Cron, Mercado Pago e integración de IA
-- Observabilidad (Sentry, métricas)
+- Métricas (latencia, cobranza, IA)
+- Un segundo ambiente para `main`. Hasta que exista, el pipeline no despliega esa rama.
 
-Corresponden a checkpoints posteriores según [docs/10-entrega-academica.md](../docs/10-entrega-academica.md).
+Worker, Cron y métricas corresponden a checkpoints posteriores según [docs/10-entrega-academica.md](../docs/10-entrega-academica.md).
