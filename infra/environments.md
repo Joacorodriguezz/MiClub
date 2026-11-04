@@ -80,6 +80,11 @@ Actions. El procedimiento está en [`README.md`](README.md).
 `main` no tiene secrets propios: no hay un segundo proyecto en este registro, y el
 pipeline no lo despliega.
 
+### Sentry
+
+No es un secret de GitHub Actions. `SENTRY_DSN` vive en Render. `VITE_SENTRY_DSN`
+vive en Vercel (Preview y Production). Los dos vacíos hasta que exista el proyecto.
+
 ## Comprobaciones mínimas
 
 Ejecutar tras provisionar (o usar [`verify-setup.sh`](verify-setup.sh)):

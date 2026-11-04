@@ -29,6 +29,9 @@ services:
         sync: false
       - key: SUPABASE_JWT_SECRET
         sync: false
+      # Errores de la API. Vacío: el proceso arranca igual y no llama a Sentry.
+      - key: SENTRY_DSN
+        sync: false
       - key: CORS_ORIGIN
         sync: false
       # Previews de Vercel: un hostname distinto por PR. No es un secreto.

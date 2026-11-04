@@ -601,6 +601,39 @@ sin DNI, nombre ni email. Sin Sentry: eso es el paso siguiente.
 
 ---
 
+## AID-017 · Sentry en la API y en el frontend, DSN por entorno
+
+**Fecha:** 2026-11-04 · **Responsable:** Luca Giordani · **Herramienta:** Cursor Grok 4.7
+
+**Problema abordado**
+El TPI pide los errores en Sentry, agrupados por módulo. No hay organización ni
+DSN de Sentry. El login pide email y contraseña: un SDK con breadcrumbs, replay
+o variables locales se los llevaría.
+
+**Prompt / Herramienta**
+Cursor, paso 7 sobre `feat/backend-ready`. Sentry en backend y frontend con el
+DSN desde el entorno. Sin inventar un DSN ni un proyecto.
+
+**Salida de la IA**
+- `SENTRY_DSN` y `VITE_SENTRY_DSN`. Vacío, http, o un placeholder con `YOUR_`:
+  el SDK no arranca y no hay llamada de red.
+- El backend no carga las integraciones por defecto (nada de HTTP, Prisma ni
+  variables locales). El evento sale sin usuario, request, breadcrumbs ni
+  `server_name`. Email, Bearer y URLs de Postgres del mensaje se reemplazan.
+- El tag `module` sale de la ruta (`platform`, `auth`, o el primer segmento) y
+  el fingerprint lo incluye. `club_id` solo si el header es un UUID. No se
+  reportan los 4xx.
+- El frontend no activa replay ni tracing. El diálogo de Sentry, que pide
+  nombre y email, queda apagado. El DSN del browser va en Vercel, no en Actions.
+
+**Validación y corrección humana**
+- **Pendiente:** Luca revisa el diff antes de commitear. Esta entrada no marca el
+  cambio como aceptado.
+- Quien tenga la cuenta de Sentry sigue el orden de [`infra/README.md`](infra/README.md).
+  Hasta entonces no se envió ningún evento.
+
+---
+
 ## Plantilla para nuevas entradas
 
 ```markdown

@@ -122,10 +122,19 @@ chmod +x infra/verify-setup.sh
 | [`.github/workflows/backend-ci.yml`](../.github/workflows/backend-ci.yml) | Tests de la API y, en `development`, migración + deploy hook |
 | [`.github/workflows/frontend-ci.yml`](../.github/workflows/frontend-ci.yml) | Build del frontend y publish a Vercel |
 
+## 6. Sentry
+
+No hay un DSN en el repo. Con la variable vacía el SDK no arranca.
+
+1. Crear un proyecto de Sentry para Node y otro para el browser. Pueden ser el mismo proyecto si se prefiere un solo DSN.
+2. En Render, cargar `SENTRY_DSN` en `miclub-api`. No pegarlo en GitHub Actions ni en el repo.
+3. En Vercel, cargar `VITE_SENTRY_DSN` en Preview y Production. Vite lo incrusta en el build; por eso va en el proyecto de Vercel, no en un secret de Actions.
+4. El backend manda el error con el tag `module` (`platform`, `auth`, o el primer segmento del path) y `club_id` si el header es un UUID. No manda usuario, headers, body ni variables locales.
+
 ## Fuera de alcance
 
 - Worker, Cron, Mercado Pago e integración de IA
-- Observabilidad (Sentry, métricas)
+- Métricas (latencia, cobranza, IA)
 - Un segundo ambiente para `main`. Hasta que exista, el pipeline no despliega esa rama.
 
-Worker, Cron y observabilidad corresponden a checkpoints posteriores según [docs/10-entrega-academica.md](../docs/10-entrega-academica.md).
+Worker, Cron y métricas corresponden a checkpoints posteriores según [docs/10-entrega-academica.md](../docs/10-entrega-academica.md).

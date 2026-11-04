@@ -2,12 +2,17 @@ import { createApp } from './app';
 import { buildCorsOptions, validateProductionEnv } from './config/cors';
 import { createRuntimeClient } from './infrastructure/database/runtimeClient';
 import { log } from './infrastructure/logging/logger';
+import { initSentry } from './infrastructure/observability/sentry';
 import { readAuthConfig } from './modules/auth/accessToken';
 
 /**
  * Punto de entrada del proceso. Levanta el servidor HTTP.
  * Render inyecta PORT; en local usa 3000. Bind 0.0.0.0 para el Web Service.
  */
+if (!initSentry()) {
+  log({ level: 'info', msg: 'Sentry desactivado: falta SENTRY_DSN' });
+}
+
 const productionEnvError = validateProductionEnv();
 if (productionEnvError) {
   log({ level: 'error', msg: productionEnvError });

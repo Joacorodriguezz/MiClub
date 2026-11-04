@@ -7,8 +7,9 @@ import express, {
   type Response,
 } from 'express';
 import { buildCorsOptions } from './config/cors';
-import { log } from './infrastructure/logging/logger';
+import { clubIdFromHeader, log } from './infrastructure/logging/logger';
 import { requestLogger } from './infrastructure/logging/requestLog';
+import { captureError, moduleFromPath } from './infrastructure/observability/sentry';
 import { createSessionRouter, type SessionAuth } from './modules/auth/router';
 
 /** Sonda de readiness. El default ejecuta `SELECT 1` contra DATABASE_URL. */
@@ -54,13 +55,18 @@ export function createApp(options?: {
     try {
       await readinessProbe();
       res.status(200).json({ status: 'ok' });
-    } catch {
+    } catch (error) {
       const requestId = res.getHeader('X-Request-Id');
       log({
         level: 'error',
         msg: 'ready: la base no respondió',
         request_id: typeof requestId === 'string' ? requestId : null,
         club_id: null,
+      });
+      captureError(error, {
+        module: 'platform',
+        clubId: null,
+        requestId: typeof requestId === 'string' ? requestId : null,
       });
       res.status(503).json({ status: 'unavailable' });
     }
@@ -74,7 +80,7 @@ export function createApp(options?: {
 
   const errorHandler: ErrorRequestHandler = (
     err: unknown,
-    _req: Request,
+    req: Request,
     res: Response,
     _next: NextFunction,
   ) => {
@@ -107,6 +113,15 @@ export function createApp(options?: {
       typeof err.stack === 'string'
     ) {
       body.stack = err.stack;
+    }
+
+    if (status >= 500) {
+      const requestId = res.getHeader('X-Request-Id');
+      captureError(err, {
+        module: moduleFromPath(req.path),
+        clubId: clubIdFromHeader(req.get('X-Organization-Id')),
+        requestId: typeof requestId === 'string' ? requestId : null,
+      });
     }
 
     res.status(status).json(body);
