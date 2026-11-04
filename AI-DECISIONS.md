@@ -571,6 +571,36 @@ resultado de deploy.
 
 ---
 
+## AID-016 · Logs estructurados con club_id y sin datos personales
+
+**Fecha:** 2026-11-04 · **Responsable:** Luca Giordani · **Herramienta:** Cursor Grok 4.7
+
+**Problema abordado**
+El TPI pide una línea de log con `club_id` y sin datos personales, tokens ni el
+contenido de un archivo importado. El proceso escribía texto con `console`, y el
+fallo de `/ready` podía terminar registrando el error de la base.
+
+**Prompt / Herramienta**
+Cursor, paso 6 sobre `feat/backend-ready`. Log estructurado con el id del club y
+sin DNI, nombre ni email. Sin Sentry: eso es el paso siguiente.
+
+**Salida de la IA**
+- Cada evento es una línea JSON. `club_id` está siempre; es null si no hay un
+  UUID. El valor es el `organization_id` del tenant. El campo se llama `club_id`
+  porque así lo nombra la observabilidad del TPI. El schema no se renombra.
+- El logger solo copia nivel, mensaje, request id, club, método, path, status y
+  duración. Un email, un nombre, un DNI o un token que llegue como campo extra
+  no se serializa. El path se guarda sin query. Un email o un `Bearer` dentro
+  del mensaje se reemplaza.
+- El header de club se loguea solo si es un UUID. `/ready` registra que la base
+  no respondió, sin el error original.
+
+**Validación y corrección humana**
+- **Pendiente:** Luca revisa el diff antes de commitear. Esta entrada no marca el
+  cambio como aceptado.
+
+---
+
 ## Plantilla para nuevas entradas
 
 ```markdown

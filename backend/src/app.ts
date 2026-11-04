@@ -7,6 +7,8 @@ import express, {
   type Response,
 } from 'express';
 import { buildCorsOptions } from './config/cors';
+import { log } from './infrastructure/logging/logger';
+import { requestLogger } from './infrastructure/logging/requestLog';
 import { createSessionRouter, type SessionAuth } from './modules/auth/router';
 
 /** Sonda de readiness. El default ejecuta `SELECT 1` contra DATABASE_URL. */
@@ -36,6 +38,7 @@ export function createApp(options?: {
 
   // CORS antes del body parser: JSON inválido sigue respondiendo con headers CORS.
   app.use(cors(buildCorsOptions()));
+  app.use(requestLogger);
   app.use(express.json());
 
   app.get('/health', (_req: Request, res: Response) => {
@@ -52,7 +55,13 @@ export function createApp(options?: {
       await readinessProbe();
       res.status(200).json({ status: 'ok' });
     } catch {
-      console.error('GET /ready: la base no respondió');
+      const requestId = res.getHeader('X-Request-Id');
+      log({
+        level: 'error',
+        msg: 'ready: la base no respondió',
+        request_id: typeof requestId === 'string' ? requestId : null,
+        club_id: null,
+      });
       res.status(503).json({ status: 'unavailable' });
     }
   });

@@ -39,13 +39,9 @@ export function requireTenant(runtimeClient: PrismaClient): RequestHandler {
 
 export function sendAuthError(res: Response, error: unknown): void {
   if (error instanceof HttpError) {
-    if (error.status === 503) {
-      console.error('GET /session: auth no configurada o conexión privilegiada');
-    }
     res.status(error.status).json({ error: error.message });
     return;
   }
-  console.error('GET /session: fallo de auth');
   res.status(500).json({ error: 'Internal Server Error' });
 }
 
