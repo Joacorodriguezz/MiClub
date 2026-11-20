@@ -829,6 +829,20 @@ Claude Code: resolver el conflicto de `backend/src/app.ts` con `development` y a
 
 ---
 
+## AID-024 · Consulta administrativa de cuenta corriente
+
+**Fecha:** 2026-11-27
+
+**Problema abordado.** Tesorería necesita ver deuda, vencimientos, crédito y movimientos de una cuenta mientras sigue abierta la relación del padrón con las cuentas (D4).
+
+**Prompt / Herramienta.** Claude Code y Codex: completar la pantalla de cobranza sobre el frontend y la API de `development` (auth del PR #9, endpoint `GET /api/v1/accounts/:accountId/statement` del PR #10).
+
+**Salida de la IA.** Tras el ingreso en `/ingresar`, la pantalla consulta por UUID de cuenta. Cada consulta usa el token de la sesión y el club validado por `/session` (`Authorization` + `X-Organization-Id`). El cliente valida la forma de la respuesta del servidor y muestra los importes en centavos enteros, sin float. Los totales, cargos y pagos provienen del ledger. La pantalla no establece el vínculo de la cuenta con socios o familias.
+
+**Validación y corrección humana.** Pendiente. Verificar con tesorería una cuenta con pagos parciales, una sin movimientos y el rechazo de acceso entre clubes.
+
+---
+
 ## Plantilla para nuevas entradas
 
 ```markdown
