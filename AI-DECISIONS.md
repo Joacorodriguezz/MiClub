@@ -393,6 +393,20 @@ Verificación hecha durante la sesión, contra Postgres 16 local:
 
 ---
 
+## AID-021 · Preselección para revisar transferencias (IA-2)
+
+**Fecha:** 2026-11-20 · **Responsable de revisión:** Joaquín (pendiente)
+
+**Problema abordado.** Construir la fase determinística del doc 09 antes de integrar padrón, ledger y proveedor.
+
+**Prompt / Herramienta.** Codex, implementar una pieza testeable de conciliación con revisión humana y salida manual.
+
+**Salida de la IA.** Una función pura recibe un movimiento y una proyección de cuentas. Un alias confirmado del mismo club lleva a confirmación humana. Las coincidencias de palabras del nombre y monto exacto ordenan hasta cinco candidatos. Un empate en el corte o un alias ambiguo deriva a revisión manual. No hay persistencia, llamada a un modelo ni imputación de pagos.
+
+**Validación y corrección humana.** Pendiente. Revisar con tesorería la prioridad de las señales y la normalización con movimientos reales. Quedan pendientes los adaptadores al padrón y ledger, job del proveedor, pantalla de confirmación y registro de alias. Las pruebas sintéticas no miden el criterio de aceptación del 80 %.
+
+---
+
 ## Plantilla para nuevas entradas
 
 ```markdown
