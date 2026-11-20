@@ -1,6 +1,5 @@
 import { type Request, type Response, Router } from 'express';
 import type { BillingPeriod } from '@prisma/client';
-import { withTenant } from '../../infrastructure/database/tenant';
 import { badRequest } from '../../shared/errors/http-error';
 import { asyncHandler } from '../../shared/http/async-handler';
 import { getTenant, requireTenant } from '../../shared/http/tenant-context';
@@ -96,23 +95,24 @@ export function serializeStatement(s: AccountStatement) {
  */
 export function createFinanceRouter(): Router {
   const router = Router();
-  router.use(requireTenant);
 
   router.get(
     '/billing-periods',
+    requireTenant,
     asyncHandler(async (req: Request, res: Response) => {
-      const { organizationId } = getTenant(req);
-      const periods = await withTenant(organizationId, (tx) => listBillingPeriods(tx, organizationId));
+      const { organizationId, run } = getTenant(req);
+      const periods = await run((tx) => listBillingPeriods(tx, organizationId));
       res.json({ billingPeriods: periods.map(serializeBillingPeriod) });
     }),
   );
 
   router.post(
     '/billing-periods',
+    requireTenant,
     asyncHandler(async (req: Request, res: Response) => {
-      const { organizationId } = getTenant(req);
+      const { organizationId, run } = getTenant(req);
       const input = parsePeriodInput(body(req));
-      const period = await withTenant(organizationId, (tx) =>
+      const period = await run((tx) =>
         createBillingPeriod(tx, organizationId, input),
       );
       res.status(201).json(serializeBillingPeriod(period));
@@ -121,10 +121,11 @@ export function createFinanceRouter(): Router {
 
   router.post(
     '/billing-periods/:periodId/issue',
+    requireTenant,
     asyncHandler(async (req: Request, res: Response) => {
-      const { organizationId, userId } = getTenant(req);
+      const { organizationId, userId, run } = getTenant(req);
       const periodId = parseUuid(req.params.periodId, 'periodId');
-      const result = await withTenant(organizationId, async (tx) => {
+      const result = await run(async (tx) => {
         const period = await tx.billingPeriod.findFirst({
           where: { id: periodId, organizationId },
           select: { year: true, month: true },
@@ -143,10 +144,11 @@ export function createFinanceRouter(): Router {
 
   router.get(
     '/accounts/:accountId/statement',
+    requireTenant,
     asyncHandler(async (req: Request, res: Response) => {
-      const { organizationId } = getTenant(req);
+      const { organizationId, run } = getTenant(req);
       const accountId = parseUuid(req.params.accountId, 'accountId');
-      const statement = await withTenant(organizationId, (tx) =>
+      const statement = await run((tx) =>
         getAccountStatement(tx, organizationId, accountId),
       );
       res.json(serializeStatement(statement));

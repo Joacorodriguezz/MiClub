@@ -25,3 +25,5 @@ Mercado Pago, pero el dominio NO se acopla al SDK: la integración vive en
   `Payment` con `method: MERCADO_PAGO` y llama a `allocateOpenBalance` del módulo
   finance, igual que el pago manual.
 - Reversiones de pagos como contraasientos.
+
+Para reintentar un pago manual sin referencia externa, el cliente genera un UUID por operación y envía el mismo valor en el header `Idempotency-Key`. Un reintento responde 409 y conserva el primer asiento. Dos pagos distintos en efectivo requieren claves distintas. La clave y la referencia son únicas dentro del club.

@@ -27,6 +27,8 @@ import { getAccountStatement } from './ledger.service';
  */
 const db = new PrismaClient({ datasourceUrl: process.env.DATABASE_URL });
 
+if (!process.env.RUNTIME_DATABASE_URL) throw new Error('Falta RUNTIME_DATABASE_URL');
+const runtime = new PrismaClient({ datasourceUrl: process.env.RUNTIME_DATABASE_URL });
 const suffix = randomUUID().slice(0, 8);
 const account1 = randomUUID();
 const account2 = randomUUID();
@@ -34,8 +36,8 @@ let orgA: string;
 let orgB: string;
 let userA: string;
 
-const asA = <T>(fn: (tx: TenantTransaction) => Promise<T>) => withTenant(orgA, fn, db);
-const asB = <T>(fn: (tx: TenantTransaction) => Promise<T>) => withTenant(orgB, fn, db);
+const asA = <T>(fn: (tx: TenantTransaction) => Promise<T>) => withTenant(orgA, fn, runtime);
+const asB = <T>(fn: (tx: TenantTransaction) => Promise<T>) => withTenant(orgB, fn, runtime);
 
 const cashPayment = (accountId: string, amountCents: bigint, externalReference: string | null = null) => ({
   accountId,
@@ -77,7 +79,7 @@ afterAll(async () => {
     await tx.user.deleteMany({ where: { id: userA } });
     await tx.organization.deleteMany({ where: { id: { in: orgs } } });
   });
-  await db.$disconnect();
+  await Promise.all([runtime.$disconnect(), db.$disconnect()]);
 });
 
 describe('ledger de cobranza', () => {
@@ -358,6 +360,16 @@ describe('aislamiento multi-tenant del ledger (RLS)', () => {
     ).rejects.toThrow(/row-level security/);
   });
 
+  it('la FK del cargo exige que el periodo pertenezca al mismo club', async () => {
+    const period = await asA((tx) => tx.billingPeriod.findFirstOrThrow({ where: { organizationId: orgA } }));
+    await expect(asB((tx) => tx.charge.create({
+      data: {
+        organizationId: orgB, billingPeriodId: period.id, accountId: randomUUID(),
+        type: 'FEE', amountCents: 123n, concept: 'Cuota', dueDate: period.dueDate,
+      },
+    }))).rejects.toMatchObject({ code: 'P2003' });
+  });
+
   it('el club B no puede aplicar un pago suyo a un cargo del club A', async () => {
     const { payment } = await asB((tx) =>
       recordManualPayment(tx, orgB, cashPayment(account1, 100_000n), null),
@@ -374,6 +386,25 @@ describe('aislamiento multi-tenant del ledger (RLS)', () => {
   });
 });
 
+it('aplica el primer pago aun cuando la emision empieza antes del commit', async () => {
+  const accountId = randomUUID();
+  const period = await asA((tx) => createBillingPeriod(tx, orgA, {
+    year: 2027, month: 3, dueDate: new Date('2027-03-10'),
+  }));
+  let notifyPayment!: () => void;
+  const paymentWritten = new Promise<void>((resolve) => { notifyPayment = resolve; });
+  const paying = asA(async (tx) => {
+    await recordManualPayment(tx, orgA, cashPayment(accountId, 100n), userA);
+    notifyPayment();
+    await tx.$executeRaw`SELECT pg_sleep(0.2)`;
+  });
+  const issuing = paymentWritten.then(() => asA((tx) => issueBillingPeriod(tx, orgA, period.id,
+    [{ accountId, amountCents: 100n, concept: 'Cuota' }], userA)));
+  await Promise.all([paying, issuing]);
+  const statement = await asA((tx) => getAccountStatement(tx, orgA, accountId));
+  expect(statement.totals).toMatchObject({ appliedCents: 100n, creditCents: 0n, debtCents: 0n });
+});
+
 describe('API de cobranza', () => {
   it('sin usuario autenticado responde 401 (falla cerrado)', async () => {
     const res = await request(createApp()).get('/api/v1/billing-periods');
@@ -385,7 +416,7 @@ describe('API de cobranza', () => {
     const app = express();
     app.use(express.json());
     app.use((req, _res, next) => {
-      req.tenant = { organizationId: orgA, userId: userA };
+      req.tenant = { organizationId: orgA, userId: userA, run: asA };
       next();
     });
     app.use('/api/v1', createFinanceRouter());
@@ -410,6 +441,17 @@ describe('API de cobranza', () => {
       .post(`/api/v1/accounts/${account}/payments`)
       .send({ amountCents: 15.5, method: 'CASH' });
     expect(invalid.status).toBe(400);
+
+    const cashAccount = randomUUID();
+    const cashUrl = `/api/v1/accounts/${cashAccount}/payments`;
+    const cash = { amountCents: 100, method: 'CASH' };
+    expect((await request(app).post(cashUrl).send(cash)).status).toBe(400);
+    const key = randomUUID();
+    const retries = await Promise.all([1, 2].map(() =>
+      request(app).post(cashUrl).set('Idempotency-Key', key).send(cash)));
+    expect(retries.map((res) => res.status).sort()).toEqual([201, 409]);
+    const cashStatement = await request(app).get(`/api/v1/accounts/${cashAccount}/statement`);
+    expect(cashStatement.body.totals.paidCents).toBe(100);
 
     const paid = await request(app)
       .post(`/api/v1/accounts/${account}/payments`)

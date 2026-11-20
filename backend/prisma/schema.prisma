@@ -142,6 +142,7 @@ model BillingPeriod {
   issuedBy     User?        @relation(fields: [issuedByUserId], references: [id])
   charges      Charge[]
 
+  @@unique([organizationId, id])
   @@unique([organizationId, year, month])
   @@map("billing_periods")
 }
@@ -161,7 +162,7 @@ model Charge {
   createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
 
   organization  Organization        @relation(fields: [organizationId], references: [id])
-  billingPeriod BillingPeriod       @relation(fields: [billingPeriodId], references: [id])
+  billingPeriod BillingPeriod       @relation(fields: [organizationId, billingPeriodId], references: [organizationId, id])
   createdBy     User?               @relation(fields: [createdByUserId], references: [id])
   allocations   PaymentAllocation[]
 
@@ -184,6 +185,7 @@ model Payment {
   /// Referencia del medio de pago (id de Mercado Pago, n° de transferencia).
   /// Única por club: registrar dos veces el mismo pago falla.
   externalReference String?       @map("external_reference")
+  requestId         String?       @map("request_id") @db.Uuid
   notes             String?
   recordedByUserId  String?       @map("recorded_by_user_id") @db.Uuid
   createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -192,6 +194,7 @@ model Payment {
   recordedBy   User?               @relation(fields: [recordedByUserId], references: [id])
   allocations  PaymentAllocation[]
 
+  @@unique([organizationId, requestId])
   @@unique([organizationId, externalReference])
   @@index([organizationId, accountId])
   @@map("payments")

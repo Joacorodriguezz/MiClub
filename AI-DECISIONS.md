@@ -391,7 +391,7 @@ Verificación hecha durante la sesión, contra Postgres 16 local:
   - Revisar que nombrar el código en inglés (en lugar del español del CLAUDE.md
     original) sea la decisión del equipo.
 
-## AID-011 · Ledger de cobranza: períodos, cargos, pagos y cuenta corriente
+## AID-019 · Ledger de cobranza: períodos, cargos, pagos y cuenta corriente
 
 **Fecha:** 2026-10-29 · **Responsable:** Joaquín · **Herramienta:** Claude Opus 5.5 vía Claude Code
 
@@ -439,6 +439,12 @@ Verificación hecha durante la sesión, contra Postgres 16 local:
 - Corrección durante la sesión: los triggers usaban SQLSTATE de clase 23, que
   Prisma traduce a sus propios códigos y pierde el mensaje. Quedaron con el código
   por defecto.
+
+**Revisión del 20/11/2026 con Codex (Astra)**
+
+Joaquín pidió revisar el módulo y preparar un PR a development. Se conservó la migración original y se añadió otra para la FK compuesta por club y período y la clave de operación del pago manual. La emisión toma los locks por cuenta en orden estable antes de consultar pagos. La cuenta corriente comparte esos locks para leer cargos y pagos coherentes. Cada ruta exige un actor y una transacción del rol de runtime.
+
+PostgreSQL 16.16 efímero local: tres migraciones aplicadas, diff de Prisma sin diferencias, typecheck y build correctos, 19 pruebas unitarias y 34 de integración aprobadas. Los nuevos casos cubren pago durante la emisión, FK entre clubes y doble envío de efectivo. El test HTTP inyecta el contexto de autenticación. Falta integrar el JWT del PR #9 y resolver el usuario interno de la membresía. Se renumeró esta entrada para respetar las entradas del PR #9 y la rama de verificación CP1.
 
 **Validación y corrección humana**
 - _(A completar por Joaquín después de leer el código.)_ Puntos a validar:

@@ -5,6 +5,7 @@ import type { Allocation } from '../finance/allocation';
 import { allocateOpenBalance, lockAccount } from '../finance/ledger.service';
 
 export interface NewManualPayment {
+  requestId?: string;
   accountId: string;
   amountCents: bigint;
   method: Exclude<PaymentMethod, 'MERCADO_PAGO'>;
@@ -40,7 +41,7 @@ export async function recordManualPayment(
     });
   } catch (err) {
     if (isUniqueViolation(err)) {
-      throw conflict(`Ya hay un pago registrado con la referencia ${input.externalReference}`);
+      throw conflict('Ya se registro un pago con esta clave de operacion o referencia');
     }
     throw err;
   }

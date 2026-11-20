@@ -1,5 +1,4 @@
 import { type Request, type Response, Router } from 'express';
-import { withTenant } from '../../infrastructure/database/tenant';
 import { badRequest } from '../../shared/errors/http-error';
 import { asyncHandler } from '../../shared/http/async-handler';
 import { getTenant, requireTenant } from '../../shared/http/tenant-context';
@@ -48,17 +47,22 @@ function parseManualPayment(accountId: string, raw: Record<string, unknown>): Ne
 
 export function createPaymentsRouter(): Router {
   const router = Router();
-  router.use(requireTenant);
 
   router.post(
     '/accounts/:accountId/payments',
+    requireTenant,
     asyncHandler(async (req: Request, res: Response) => {
-      const { organizationId, userId } = getTenant(req);
+      const { organizationId, userId, run } = getTenant(req);
       const accountId = parseUuid(req.params.accountId, 'accountId');
       const raw = typeof req.body === 'object' && req.body !== null ? req.body : {};
       const input = parseManualPayment(accountId, raw);
+      const key = req.get('Idempotency-Key');
+      if (key !== undefined) input.requestId = parseUuid(key, 'Idempotency-Key');
+      if (!input.requestId && !input.externalReference) {
+        throw badRequest('Un pago sin referencia requiere Idempotency-Key (UUID)');
+      }
 
-      const { payment, allocations } = await withTenant(organizationId, (tx) =>
+      const { payment, allocations } = await run((tx) =>
         recordManualPayment(tx, organizationId, input, userId),
       );
 

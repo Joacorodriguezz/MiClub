@@ -65,6 +65,7 @@ export async function issueBillingPeriod(
   items: ChargeToIssue[],
   issuedByUserId: string | null,
 ): Promise<IssueResult> {
+  await tx.$queryRaw`SELECT id FROM billing_periods WHERE id = ${periodId}::uuid AND organization_id = ${organizationId}::uuid FOR UPDATE`;
   const period = await tx.billingPeriod.findFirst({ where: { id: periodId, organizationId } });
   if (!period) {
     throw notFound('Período inexistente');
@@ -73,6 +74,8 @@ export async function issueBillingPeriod(
     throw conflict('El período está cerrado: no se pueden emitir cargos');
   }
 
+  const accountIds = items.map((item) => item.accountId);
+  await tx.$queryRaw`SELECT 1 AS locked FROM app_lock_ledger_accounts(${accountIds}::uuid[])`;
   const { count } = await tx.charge.createMany({
     data: items.map((item) => ({
       organizationId,
@@ -90,13 +93,13 @@ export async function issueBillingPeriod(
   const issuedPeriod =
     period.status === 'OPEN'
       ? await tx.billingPeriod.update({
-          where: { id: period.id },
+          where: { id: period.id, organizationId },
           data: { status: 'ISSUED', issuedAt: new Date(), issuedByUserId },
         })
       : period;
 
   const accountsWithPayments = await tx.payment.findMany({
-    where: { organizationId, accountId: { in: items.map((i) => i.accountId) } },
+    where: { organizationId, accountId: { in: accountIds } },
     select: { accountId: true },
     distinct: ['accountId'],
   });

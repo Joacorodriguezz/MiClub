@@ -118,6 +118,7 @@ export async function getAccountStatement(
   accountId: string,
   today: string = todayInArgentina(),
 ): Promise<AccountStatement> {
+  await lockAccount(tx, accountId);
   const [charges, payments] = await Promise.all([
     tx.charge.findMany({
       where: { organizationId, accountId },

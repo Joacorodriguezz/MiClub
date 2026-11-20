@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
+import type { TenantTransaction } from '../../infrastructure/database/tenant';
 import { HttpError } from '../errors/http-error';
 
 /**
@@ -9,7 +10,8 @@ import { HttpError } from '../errors/http-error';
  */
 export interface TenantContext {
   organizationId: string;
-  userId: string | null;
+  userId: string;
+  run: <T>(fn: (tx: TenantTransaction) => Promise<T>) => Promise<T>;
 }
 
 declare global {
@@ -25,7 +27,7 @@ const unauthorized = () =>
   new HttpError(401, 'Se requiere un usuario autenticado con un club seleccionado');
 
 export function requireTenant(req: Request, _res: Response, next: NextFunction): void {
-  next(req.tenant ? undefined : unauthorized());
+  next(req.tenant?.userId && typeof req.tenant.run === 'function' ? undefined : unauthorized());
 }
 
 export function getTenant(req: Request): TenantContext {
