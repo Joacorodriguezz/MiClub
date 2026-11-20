@@ -76,6 +76,8 @@ model OrganizationMembership {
   organization Organization @relation(fields: [organizationId], references: [id])
   user         User         @relation(fields: [userId], references: [id])
 
+  paymentReversals PaymentReversal[]
+
   @@unique([organizationId, userId])
   @@index([userId])
   @@map("organization_memberships")
@@ -194,6 +196,9 @@ model Payment {
   recordedBy   User?               @relation(fields: [recordedByUserId], references: [id])
   allocations  PaymentAllocation[]
 
+  reversal PaymentReversal?
+
+  @@unique([organizationId, id])
   @@unique([organizationId, requestId])
   @@unique([organizationId, externalReference])
   @@index([organizationId, accountId])
@@ -213,7 +218,22 @@ model PaymentAllocation {
   payment      Payment      @relation(fields: [paymentId], references: [id])
   charge       Charge       @relation(fields: [chargeId], references: [id])
 
-  @@unique([paymentId, chargeId])
+  @@index([paymentId, chargeId])
   @@index([chargeId])
   @@map("payment_allocations")
+}
+
+/// Contraasiento total del importe y las aplicaciones del pago original.
+model PaymentReversal {
+  paymentId      String   @id @map("payment_id") @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  reason         String
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  payment Payment @relation(fields: [organizationId, paymentId], references: [organizationId, id], onDelete: NoAction, onUpdate: NoAction)
+  actor OrganizationMembership @relation(fields: [organizationId, userId], references: [organizationId, userId], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([organizationId, paymentId])
+  @@map("payment_reversals")
 }

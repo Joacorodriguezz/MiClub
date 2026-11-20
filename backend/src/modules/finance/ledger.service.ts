@@ -11,6 +11,8 @@ import { allocateFifo, type Allocation, chargeStatus, type ChargeStatus } from '
  * además cada query filtra por `organizationId` (regla 3 del CLAUDE.md).
  */
 
+const effectiveAllocations = { where: { payment: { reversal: null } }, select: { amountCents: true } };
+
 const sum = (values: bigint[]) => values.reduce((acc, v) => acc + v, 0n);
 
 /**
@@ -37,12 +39,12 @@ export async function allocateOpenBalance(
     tx.charge.findMany({
       where: { organizationId, accountId },
       orderBy: [{ dueDate: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
-      select: { id: true, amountCents: true, allocations: { select: { amountCents: true } } },
+      select: { id: true, amountCents: true, allocations: effectiveAllocations },
     }),
     tx.payment.findMany({
-      where: { organizationId, accountId },
+      where: { organizationId, accountId, reversal: null },
       orderBy: [{ paidAt: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
-      select: { id: true, amountCents: true, allocations: { select: { amountCents: true } } },
+      select: { id: true, amountCents: true, allocations: effectiveAllocations },
     }),
   ]);
 
@@ -88,6 +90,7 @@ export interface StatementPayment {
   method: PaymentMethod;
   paidAt: Date;
   externalReference: string | null;
+  reversal: { userId: string; reason: string; createdAt: Date } | null;
 }
 
 export interface AccountStatement {
@@ -125,13 +128,13 @@ export async function getAccountStatement(
       orderBy: [{ dueDate: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
       include: {
         billingPeriod: { select: { year: true, month: true } },
-        allocations: { select: { amountCents: true } },
+        allocations: effectiveAllocations,
       },
     }),
     tx.payment.findMany({
       where: { organizationId, accountId },
       orderBy: [{ paidAt: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
-      include: { allocations: { select: { amountCents: true } } },
+      include: { allocations: effectiveAllocations, reversal: { select: { userId: true, reason: true, createdAt: true } } },
     }),
   ]);
 
@@ -160,11 +163,12 @@ export async function getAccountStatement(
     method: p.method,
     paidAt: p.paidAt,
     externalReference: p.externalReference,
+    reversal: p.reversal,
   }));
 
   const chargedCents = sum(statementCharges.map((c) => c.amountCents));
   const appliedCents = sum(statementCharges.map((c) => c.paidCents));
-  const paidCents = sum(statementPayments.map((p) => p.amountCents));
+  const paidCents = sum(statementPayments.filter((p) => !p.reversal).map((p) => p.amountCents));
   const debtCents = chargedCents - appliedCents;
   const creditCents = paidCents - appliedCents;
   const overdueCents = sum(

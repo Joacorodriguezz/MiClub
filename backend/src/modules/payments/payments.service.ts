@@ -1,6 +1,6 @@
 import type { Payment, PaymentMethod } from '@prisma/client';
 import type { TenantTransaction } from '../../infrastructure/database/tenant';
-import { conflict, isUniqueViolation } from '../../shared/errors/http-error';
+import { conflict, isUniqueViolation, notFound } from '../../shared/errors/http-error';
 import type { Allocation } from '../finance/allocation';
 import { allocateOpenBalance, lockAccount } from '../finance/ledger.service';
 
@@ -48,4 +48,28 @@ export async function recordManualPayment(
 
   const allocations = await allocateOpenBalance(tx, organizationId, input.accountId);
   return { payment, allocations };
+}
+
+export async function reverseManualPayment(
+  tx: TenantTransaction,
+  organizationId: string,
+  accountId: string,
+  paymentId: string,
+  userId: string,
+  reason: string,
+) {
+  await lockAccount(tx, accountId);
+  const payment = await tx.payment.findFirst({
+    where: { organizationId, accountId, id: paymentId },
+    include: { reversal: true },
+  });
+  if (!payment) throw notFound('Pago inexistente');
+  if (payment.method === 'MERCADO_PAGO') throw conflict('Se requiere un pago manual');
+  if (payment.reversal) return payment.reversal;
+
+  const reversal = await tx.paymentReversal.create({
+    data: { organizationId, paymentId, userId, reason },
+  });
+  await allocateOpenBalance(tx, organizationId, accountId);
+  return reversal;
 }
