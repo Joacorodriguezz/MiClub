@@ -4,7 +4,7 @@ import { asyncHandler } from '../../shared/http/async-handler';
 import { getTenant, requireTenant } from '../../shared/http/tenant-context';
 import { centsToNumber, parseAmountCents } from '../../shared/utils/money';
 import { parseUuid } from '../../shared/validation/ids';
-import { type NewManualPayment, recordManualPayment } from './payments.service';
+import { type NewManualPayment, recordManualPayment, reverseManualPayment } from './payments.service';
 
 const MANUAL_METHODS = ['CASH', 'TRANSFER', 'OTHER'] as const;
 // Fecha y hora ISO 8601 con zona explícita (Z u offset), para no adivinar el día.
@@ -81,6 +81,22 @@ export function createPaymentsRouter(): Router {
           amountCents: centsToNumber(a.amountCents),
         })),
       });
+    }),
+  );
+
+  router.post(
+    '/accounts/:accountId/payments/:paymentId/reversal',
+    requireTenant,
+    asyncHandler(async (req: Request, res: Response) => {
+      const { organizationId, userId, run } = getTenant(req);
+      const accountId = parseUuid(req.params.accountId, 'accountId');
+      const paymentId = parseUuid(req.params.paymentId, 'paymentId');
+      const reason = optionalText(req.body?.reason, 'reason', 1000);
+      if (!reason) throw badRequest('Se requiere un motivo de reversión');
+      const reversal = await run((tx) =>
+        reverseManualPayment(tx, organizationId, accountId, paymentId, userId, reason),
+      );
+      res.json(reversal);
     }),
   );
 

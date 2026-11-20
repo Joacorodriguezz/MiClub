@@ -8,7 +8,7 @@ import { type TenantTransaction, withTenant } from '../../infrastructure/databas
 import { errorHandler } from '../../shared/http/error-handler';
 import { parseDateOnly } from '../../shared/utils/dates';
 import { createPaymentsRouter } from '../payments/payments.routes';
-import { recordManualPayment } from '../payments/payments.service';
+import { recordManualPayment, reverseManualPayment } from '../payments/payments.service';
 import {
   createBillingPeriod,
   issueBillingPeriod,
@@ -71,6 +71,7 @@ afterAll(async () => {
   const orgs = [orgA, orgB];
   await db.$transaction(async (tx) => {
     await tx.$executeRawUnsafe('SET LOCAL session_replication_role = replica');
+    await tx.paymentReversal.deleteMany({ where: { organizationId: { in: orgs } } });
     await tx.paymentAllocation.deleteMany({ where: { organizationId: { in: orgs } } });
     await tx.payment.deleteMany({ where: { organizationId: { in: orgs } } });
     await tx.charge.deleteMany({ where: { organizationId: { in: orgs } } });
@@ -405,6 +406,91 @@ it('aplica el primer pago aun cuando la emision empieza antes del commit', async
   expect(statement.totals).toMatchObject({ appliedCents: 100n, creditCents: 0n, debtCents: 0n });
 });
 
+it('revierte un pago, conserva las aplicaciones históricas y aplica el crédito restante', async () => {
+  const account = randomUUID();
+  const charge = await asA(async (tx) => {
+    const period = await createBillingPeriod(tx, orgA, {
+      year: 2028, month: 5, dueDate: parseDateOnly('2028-05-10', 'dueDate'),
+    });
+    await issueBillingPeriod(tx, orgA, period.id, [{ accountId: account, amountCents: 100n, concept: 'Cuota' }], userA);
+    return tx.charge.findFirstOrThrow({ where: { organizationId: orgA, accountId: account } });
+  });
+  const pay = (amount: bigint) => asA((tx) => recordManualPayment(tx, orgA, cashPayment(account, amount), userA));
+  const { payment: first } = await pay(60n);
+  const { payment: second } = await pay(75n);
+  const reverse = () => asA((tx) => reverseManualPayment(tx, orgA, account, first.id, userA, 'Pago inexistente'));
+  const [a, b] = await Promise.all([reverse(), reverse()]);
+  expect(a).toEqual(b);
+  expect(a).toMatchObject({ paymentId: first.id, userId: userA, reason: 'Pago inexistente' });
+  expect(await asB((tx) => tx.paymentReversal.findMany())).toEqual([]);
+  await expect(asB((tx) => reverseManualPayment(tx, orgB, account, first.id, userA, 'Error'))).rejects.toThrow(/inexistente/);
+  await expect(asB((tx) => tx.paymentReversal.create({
+    data: { organizationId: orgA, paymentId: second.id, userId: userA, reason: 'Error' },
+  }))).rejects.toThrow();
+  await expect(asA((tx) => tx.paymentAllocation.create({
+    data: { organizationId: orgA, paymentId: first.id, chargeId: charge.id, amountCents: 1n },
+  }))).rejects.toThrow(/revertido/);
+  await expect(db.paymentReversal.update({ where: { paymentId: first.id }, data: { reason: 'Cambio' } })).rejects.toThrow(/inmutables/);
+  await expect(db.paymentReversal.delete({ where: { paymentId: first.id } })).rejects.toThrow(/inmutables/);
+  const history = await asA((tx) => tx.paymentAllocation.findMany({ where: { paymentId: first.id, organizationId: orgA } }));
+  expect(history.map((row) => row.amountCents)).toEqual([60n]);
+  const statement = await asA((tx) => getAccountStatement(tx, orgA, account, '2028-05-11'));
+  expect(statement.totals).toMatchObject({ paidCents: 75n, appliedCents: 75n, overdueCents: 25n, creditCents: 0n });
+  expect(statement.status).toBe('IN_ARREARS');
+  expect(statement.payments.find((p) => p.id === first.id)).toMatchObject({
+    amountCents: 60n, appliedCents: 0n, reversal: { userId: userA, createdAt: a.createdAt },
+  });
+});
+
+it('reabre dos cargos y cancela el excedente sin volver a utilizar el pago revertido', async () => {
+  const account = randomUUID();
+  await asA(async (tx) => {
+    for (const month of [1, 2]) {
+      const period = await createBillingPeriod(tx, orgA, {
+        year: 2029, month, dueDate: parseDateOnly('2029-0' + month + '-10', 'dueDate'),
+      });
+      await issueBillingPeriod(tx, orgA, period.id, [{ accountId: account, amountCents: 50n, concept: 'Cuota' }], userA);
+    }
+  });
+  const { payment } = await asA((tx) => recordManualPayment(tx, orgA, cashPayment(account, 120n), userA));
+  await asA((tx) => reverseManualPayment(tx, orgA, account, payment.id, userA, 'Importe incorrecto'));
+  const statement = await asA((tx) => getAccountStatement(tx, orgA, account, '2029-03-01'));
+  expect(statement.totals).toMatchObject({ appliedCents: 0n, paidCents: 0n, creditCents: 0n, debtCents: 100n, overdueCents: 100n });
+  expect(statement.charges.map((charge) => charge.status)).toEqual(['PENDING', 'PENDING']);
+  await asA((tx) => recordManualPayment(tx, orgA, cashPayment(account, 10n), userA));
+  const corrected = await asA((tx) => getAccountStatement(tx, orgA, account));
+  expect(corrected.charges.map((charge) => charge.paidCents)).toEqual([10n, 0n]);
+});
+
+it('serializa la reversión y el alta concurrente de otro pago sobre la misma cuenta', async () => {
+  const account = randomUUID();
+  await asA(async (tx) => {
+    const period = await createBillingPeriod(tx, orgA, {
+      year: 2029, month: 4, dueDate: parseDateOnly('2029-04-10', 'dueDate'),
+    });
+    await issueBillingPeriod(tx, orgA, period.id, [{ accountId: account, amountCents: 90n, concept: 'Cuota' }], userA);
+  });
+  const { payment } = await asA((tx) => recordManualPayment(tx, orgA, cashPayment(account, 100n), userA));
+  await Promise.all([
+    asA((tx) => reverseManualPayment(tx, orgA, account, payment.id, userA, 'Error de registro')),
+    asA((tx) => recordManualPayment(tx, orgA, cashPayment(account, 75n), userA)),
+  ]);
+  const statement = await asA((tx) => getAccountStatement(tx, orgA, account));
+  expect(statement.totals).toMatchObject({ paidCents: 75n, appliedCents: 75n, creditCents: 0n, debtCents: 15n });
+  expect(statement.charges[0].status).toBe('PARTIAL');
+});
+
+it('rechaza revertir un pago de Mercado Pago desde el servicio y la base', async () => {
+  const account = randomUUID();
+  const payment = await asA((tx) => tx.payment.create({
+    data: { ...cashPayment(account, 50n), organizationId: orgA, method: 'MERCADO_PAGO' },
+  }));
+  await expect(asA((tx) => reverseManualPayment(tx, orgA, account, payment.id, userA, 'Error'))).rejects.toThrow(/manual/);
+  await expect(asA((tx) => tx.paymentReversal.create({
+    data: { organizationId: orgA, paymentId: payment.id, userId: userA, reason: 'Error' },
+  }))).rejects.toThrow(/manual/);
+});
+
 describe('API de cobranza', () => {
   it('sin usuario autenticado responde 401 (falla cerrado)', async () => {
     const res = await request(createApp()).get('/api/v1/billing-periods');
@@ -452,6 +538,14 @@ describe('API de cobranza', () => {
     expect(retries.map((res) => res.status).sort()).toEqual([201, 409]);
     const cashStatement = await request(app).get(`/api/v1/accounts/${cashAccount}/statement`);
     expect(cashStatement.body.totals.paidCents).toBe(100);
+    const reversalUrl = cashUrl + '/' + cashStatement.body.payments[0].id + '/reversal';
+    expect((await request(createApp()).post(reversalUrl).send({ reason: 'Error' })).status).toBe(401);
+    expect((await request(app).post(reversalUrl).send({ reason: ' ' })).status).toBe(400);
+    const reversed = await request(app).post(reversalUrl).send({ reason: 'Pago duplicado' });
+    expect(reversed.status).toBe(200);
+    const corrected = await request(app).get('/api/v1/accounts/' + cashAccount + '/statement');
+    expect(corrected.body.totals).toMatchObject({ paidCents: 0, creditCents: 0 });
+    expect(corrected.body.payments[0].reversal).toMatchObject({ userId: userA, reason: 'Pago duplicado' });
 
     const paid = await request(app)
       .post(`/api/v1/accounts/${account}/payments`)

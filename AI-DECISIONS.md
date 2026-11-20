@@ -460,6 +460,28 @@ PostgreSQL 16.16 efímero local: tres migraciones aplicadas, diff de Prisma sin 
 
 ---
 
+## AID-022 · Reversión íntegra de pagos manuales
+
+**Fecha:** 2026-11-20 · **Responsable:** pendiente de revisión por el equipo
+
+**Problema abordado**
+
+Un pago manual cargado por error puede haber cubierto varias cuotas y dejado saldo a favor. La corrección debe poder reconstruirse y un reintento debe producir el mismo resultado.
+
+**Prompt / Herramienta**
+
+Codex recibió la instrucción de implementar la reversión íntegra de un pago manual inexistente y probar su aislamiento y auditoría.
+
+**Salida de la IA**
+
+Un asiento inmutable identifica al pago y compensa su importe completo y todas sus aplicaciones. Conserva el usuario del club, la fecha y el motivo. Los totales y los topes de aplicación consideran únicamente pagos vigentes. Al reabrirse deuda, el saldo de otros pagos se aplica por la regla FIFO existente. Una misma pareja pago/cargo puede recibir otra aplicación cuando queda saldo disponible por la reversión.
+
+**Validación y corrección humana**
+
+Pendiente. Las pruebas automatizadas en PostgreSQL 16 cubren la reversión concurrente, pagos aplicados a varios cargos, excedentes, redistribución de crédito, conservación de filas originales, aislamiento por club y rechazo de pagos de Mercado Pago.
+
+---
+
 ## Plantilla para nuevas entradas
 
 ```markdown
