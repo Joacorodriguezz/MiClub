@@ -634,6 +634,16 @@ DSN desde el entorno. Sin inventar un DSN ni un proyecto.
 
 ---
 
+## AID-020 · Consulta administrativa de cuenta corriente
+
+**Problema abordado.** Tesorería necesita ver deuda, vencimientos, crédito y movimientos mientras sigue abierta la relación del padrón con las cuentas (D4).
+
+**Prompt / Herramienta.** Codex, completar la pantalla de cobranza sobre el frontend del PR #9 y el contrato del PR #10.
+
+**Salida de la IA.** Consultar por UUID después del ingreso en `/ingresar`. Cada consulta usa el token de la sesión y el club validado. Los totales, cargos y pagos provienen del ledger. Para su uso con datos reales, la API integrada debe autenticar y autorizar la lectura de la cuenta en el club, y construir el contexto de tenant en el servidor. El PR #10 aislado responde 401. La pantalla no establece el vínculo de la cuenta con socios o familias.
+
+**Validación y corrección humana.** Pendiente. Verificar con tesorería una cuenta con pagos parciales, una sin movimientos y el rechazo de acceso entre clubes.
+
 ## Plantilla para nuevas entradas
 
 ```markdown
