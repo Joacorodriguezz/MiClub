@@ -634,6 +634,32 @@ DSN desde el entorno. Sin inventar un DSN ni un proyecto.
 
 ---
 
+## AID-018 · El access token exige el claim exp
+
+**Fecha:** 2026-11-26 · **Responsable:** Luca Giordani · **Herramienta:** Cursor Grok 4.7
+
+**Problema abordado**
+En la review de la PR, `verifyAccessToken` documenta el vencimiento como
+obligatorio, pero `jsonwebtoken.verify` solo rechaza un `exp` vencido cuando el
+claim existe. Un JWT firmado en HS256 sin `exp` pasaba como sesión.
+
+**Prompt / Herramienta**
+Cursor, sobre `feat/backend-ready`. Pedido de la review: exigir que `exp` esté
+presente y sea numérico, y agregar un test con un token válido sin ese claim.
+
+**Salida de la IA**
+- Después de `jwt.verify`, la función rechaza el payload si `exp` no es un número
+  finito. Cubre el claim ausente y también `NaN` o `Infinity`, que la librería
+  no trata como vencidos.
+- El test firma un token con emisor, audiencia y `role` correctos, sin `exp`, y
+  espera `UnauthorizedError`.
+
+**Validación y corrección humana**
+- **Pendiente:** Luca revisa el diff antes de commitear. Esta entrada no marca el
+  cambio como aceptado.
+
+---
+
 ## Plantilla para nuevas entradas
 
 ```markdown

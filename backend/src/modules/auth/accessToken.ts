@@ -50,6 +50,11 @@ export function verifyAccessToken(token: string, config: AccessTokenConfig): { a
     throw new UnauthorizedError();
   }
 
+  // jwt.verify rechaza un exp vencido, pero acepta un token firmado sin ese claim.
+  if (typeof payload.exp !== 'number' || !Number.isFinite(payload.exp)) {
+    throw new UnauthorizedError();
+  }
+
   if (payload.role !== 'authenticated' || typeof payload.sub !== 'string' || !UUID_PATTERN.test(payload.sub)) {
     throw new UnauthorizedError();
   }

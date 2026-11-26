@@ -29,6 +29,18 @@ describe('verifyAccessToken', () => {
     expect(verifyAccessToken(token, config)).toEqual({ authUserId: AUTH_USER_ID });
   });
 
+  it('rechaza un token firmado sin claim exp', () => {
+    const token = jwt.sign({ sub: AUTH_USER_ID, role: 'authenticated' }, SECRET, {
+      algorithm: 'HS256',
+      audience: 'authenticated',
+      issuer: ISSUER,
+    });
+    expect(jwt.decode(token)).toMatchObject({ sub: AUTH_USER_ID, role: 'authenticated' });
+    expect(jwt.decode(token)).not.toHaveProperty('exp');
+
+    expect(() => verifyAccessToken(token, config)).toThrow(UnauthorizedError);
+  });
+
   it('rechaza firma, emisor, audiencia, vencimiento, otro algoritmo y service_role', () => {
     const cases = [
       sign({}, { expiresIn: '-10s' }),
