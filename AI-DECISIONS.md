@@ -393,7 +393,41 @@ Verificación hecha durante la sesión, contra Postgres 16 local:
 
 ---
 
-## AID-011 · GET /ready y generate único en el build de Render
+## AID-011 · Aprovisionamiento de Supabase y Render, y rotación de credenciales
+
+**Fecha:** 2026-11-21 · **Responsable:** Joaquín · **Herramienta:** Claude Sonnet 5.5 vía Claude Code
+
+**Problema abordado**
+Levantar el ambiente cloud (base y API) a partir de lo ya versionado en `development`
+y dejar la conexión de la API a la base funcionando.
+
+**Prompt / Herramienta**
+Claude Code con los conectores de Supabase y Render. Se pidió levantar el proyecto en
+ambos y después automatizar toda la configuración posible.
+
+**Salida de la IA**
+Creó el proyecto `miclub` en Supabase (São Paulo), aplicó la migración `init_tenancy`,
+creó el rol `miclub_runtime`, registró la migración en `_prisma_migrations` y desplegó
+`miclub-api` en Render desde `development`.
+
+**Validación y corrección humana**
+- **Corregido:** la primera `DATABASE_URL` usaba la conexión directa, que no resuelve
+  por IPv4. Se probó el login contra los poolers y se cambió al session pooler
+  (`aws-0-sa-east-1`, puerto 5432).
+- **Corregido:** la contraseña inicial de `miclub_runtime` quedó en una conversación;
+  se rotó y se verificó que la anterior es rechazada.
+- **Corregido:** la IA afirmó al inicio que no había backend; estaba en
+  `origin/development`, no en la rama de trabajo.
+- **Pendiente de revisión humana:** la migración se aplicó con la herramienta de
+  Supabase y se registró en Prisma con SQL a mano; confirmar con
+  `prisma migrate status`. El advisor de Supabase marca `app_current_organization_id`
+  con `search_path` mutable (WARN): corregirlo con una migración nueva, no con un
+  cambio manual en la base. La API usa el pooler en modo session, no transaction como
+  decía el pendiente de AID-010.
+
+---
+
+## AID-012 · GET /ready y generate único en el build de Render
 
 **Fecha:** 2026-11-04 · **Responsable:** Luca Giordani · **Herramienta:** Cursor Grok 4.7
 
@@ -429,7 +463,7 @@ ni Mercado Pago. Sin confirmar todavía qué rol usa `DATABASE_URL` en Render.
 
 ---
 
-## AID-012 · Frontend base que consulta /health y /ready
+## AID-013 · Frontend base que consulta /health y /ready
 
 **Fecha:** 2026-11-04 · **Responsable:** Luca Giordani · **Herramienta:** Cursor Grok 4.7
 
@@ -464,7 +498,7 @@ cobranza y sin inventar la URL de Render.
 
 ---
 
-## AID-013 · Middleware de JWT y tenant con rol de runtime
+## AID-014 · Middleware de JWT y tenant con rol de runtime
 
 **Fecha:** 2026-11-04 · **Responsable:** Luca Giordani · **Herramienta:** Cursor Grok 4.7
 
@@ -503,7 +537,7 @@ de frontend, sin Render y sin inventar un proyecto de Supabase.
 
 ---
 
-## AID-014 · Login de Supabase y token hacia la API
+## AID-015 · Login de Supabase y token hacia la API
 
 **Fecha:** 2026-11-04 · **Responsable:** Luca Giordani · **Herramienta:** Cursor Grok 4.7
 
@@ -536,7 +570,7 @@ Sin inventar un project ref ni una anon key.
 
 ---
 
-## AID-015 · Pipeline de migraciones, Render y previews de Vercel
+## AID-016 · Pipeline de migraciones, Render y previews de Vercel
 
 **Fecha:** 2026-11-04 · **Responsable:** Luca Giordani · **Herramienta:** Cursor Grok 4.7
 
@@ -571,7 +605,7 @@ resultado de deploy.
 
 ---
 
-## AID-016 · Logs estructurados con club_id y sin datos personales
+## AID-017 · Logs estructurados con club_id y sin datos personales
 
 **Fecha:** 2026-11-04 · **Responsable:** Luca Giordani · **Herramienta:** Cursor Grok 4.7
 
@@ -601,7 +635,7 @@ sin DNI, nombre ni email. Sin Sentry: eso es el paso siguiente.
 
 ---
 
-## AID-017 · Sentry en la API y en el frontend, DSN por entorno
+## AID-018 · Sentry en la API y en el frontend, DSN por entorno
 
 **Fecha:** 2026-11-04 · **Responsable:** Luca Giordani · **Herramienta:** Cursor Grok 4.7
 
@@ -634,7 +668,7 @@ DSN desde el entorno. Sin inventar un DSN ni un proyecto.
 
 ---
 
-## AID-018 · El access token exige el claim exp
+## AID-019 · El access token exige el claim exp
 
 **Fecha:** 2026-11-26 · **Responsable:** Luca Giordani · **Herramienta:** Cursor Grok 4.7
 

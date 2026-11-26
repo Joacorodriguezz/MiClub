@@ -11,8 +11,8 @@ tras el sprint de provisión (~15 min) siguiendo [`README.md`](README.md).
 | Componente | Proveedor | Proyecto / servicio | URL pública | Responsable | Fecha |
 |---|---|---|---|---|---|
 | Frontend (SPA) | Vercel | `miclub-frontend` | _(completar tras deploy)_ | M1 · Plataforma | |
-| API (`/health`) | Render | `miclub-api` (Blueprint) | _(completar tras deploy)_ | M1 · Plataforma | |
-| PostgreSQL | Supabase | `miclub-dev` | — | M1 · Plataforma | |
+| API (`/health`) | Render | `miclub-api` (Web Service) | https://miclub-api-vf4m.onrender.com | M1 · Plataforma | 2026-11-21 |
+| PostgreSQL | Supabase | `miclub` | — | M1 · Plataforma | 2026-11-21 |
 | Auth + Storage | Supabase | _(mismo proyecto)_ | — | M1 · Plataforma | |
 
 **Rama de despliegue:** `development`  
@@ -100,6 +100,24 @@ Completar la columna **Fecha** y las URLs de la primera tabla cuando existan los
 
 | Servicio | Región elegida | Plan | Notas |
 |---|---|---|---|
-| Supabase | South America (São Paulo) | Free | Project ref: _(completar)_ |
-| Render API | Oregon (US West) | Free | Service ID: _(completar)_ |
+| Supabase | South America (São Paulo) | Free | Project ref: `bumoryhpbvwgoxjiqltt` |
+| Render API | Oregon (US West) | Free | Service ID: `srv-dc0vaj59fdbs7398qks0` |
 | Vercel | Edge global | Hobby | Project: _(completar)_ |
+
+## Decisión: este ambiente es el definitivo (2026-11-21)
+
+El proyecto no sale a producción real: el TPI se defiende sobre este ambiente. No hay
+ambiente separado de producción ni planes pagos.
+
+| Tema | Estado |
+|---|---|
+| Rama de despliegue | `development` (autodeploy en cada commit) |
+| Rol de la API | `miclub_runtime` (LOGIN, sin `BYPASSRLS`, miembro de `miclub_app`) |
+| `DATABASE_URL` | Session pooler de Supabase, puerto 5432 (`aws-0-sa-east-1.pooler.supabase.com`), usuario `miclub_runtime.<project-ref>`. La conexión directa `db.<ref>.supabase.co` no resuelve por IPv4 y no sirve desde Render |
+| Migraciones | Aplicadas y registradas en `_prisma_migrations` (`20261025000000_init_tenancy`) |
+| Backups | Sin point-in-time recovery (plan free). Limitación aceptada |
+| Cold start | Render free se duerme por inactividad: despertar con `GET /health` antes de una demo |
+| Pausa de Supabase | El plan free pausa el proyecto tras 7 días sin actividad: verificarlo antes de cada entrega |
+
+Pendiente: `CORS_ORIGIN` apunta a `http://localhost:5173` hasta que exista el frontend
+en Vercel.
