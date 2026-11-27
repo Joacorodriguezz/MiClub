@@ -1,19 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
-import express from 'express';
+import { createLocalJWKSet, exportJWK, generateKeyPair, type JWTVerifyGetKey, type KeyLike, SignJWT } from 'jose';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../../app';
 import { type TenantTransaction, withTenant } from '../../infrastructure/database/tenant';
-import { errorHandler } from '../../shared/http/error-handler';
 import { parseDateOnly } from '../../shared/utils/dates';
-import { createPaymentsRouter } from '../payments/payments.routes';
 import { recordManualPayment } from '../payments/payments.service';
 import {
   createBillingPeriod,
   issueBillingPeriod,
 } from './billing-periods.service';
-import { createFinanceRouter } from './finance.routes';
 import { getAccountStatement } from './ledger.service';
 
 /**
@@ -35,6 +32,19 @@ const account2 = randomUUID();
 let orgA: string;
 let orgB: string;
 let userA: string;
+const authUserA = randomUUID();
+
+// Auth real de la API: JWT firmado con una clave local y membresía en la base.
+const SUPABASE_URL = 'http://127.0.0.1:54321';
+let privateKey: KeyLike;
+let keys: JWTVerifyGetKey;
+const signAsA = () =>
+  new SignJWT({ sub: authUserA, role: 'authenticated' })
+    .setProtectedHeader({ alg: 'ES256', kid: 'test-key' })
+    .setIssuer(`${SUPABASE_URL}/auth/v1`)
+    .setAudience('authenticated')
+    .setExpirationTime('1h')
+    .sign(privateKey);
 
 const asA = <T>(fn: (tx: TenantTransaction) => Promise<T>) => withTenant(orgA, fn, runtime);
 const asB = <T>(fn: (tx: TenantTransaction) => Promise<T>) => withTenant(orgB, fn, runtime);
@@ -49,6 +59,11 @@ const cashPayment = (accountId: string, amountCents: bigint, externalReference: 
 });
 
 beforeAll(async () => {
+  process.env.SUPABASE_URL = SUPABASE_URL;
+  const pair = await generateKeyPair('ES256');
+  privateKey = pair.privateKey;
+  keys = createLocalJWKSet({ keys: [{ ...(await exportJWK(pair.publicKey)), kid: 'test-key', alg: 'ES256' }] });
+
   const [a, b] = await Promise.all([
     db.organization.create({ data: { name: 'Club A', slug: `ledger-a-${suffix}` } }),
     db.organization.create({ data: { name: 'Club B', slug: `ledger-b-${suffix}` } }),
@@ -57,7 +72,7 @@ beforeAll(async () => {
   orgB = b.id;
 
   const user = await db.user.create({
-    data: { authUserId: randomUUID(), email: `tesorero-${suffix}@test.local` },
+    data: { authUserId: authUserA, email: `tesorero-${suffix}@test.local` },
   });
   userA = user.id;
   await db.organizationMembership.create({
@@ -406,38 +421,47 @@ it('aplica el primer pago aun cuando la emision empieza antes del commit', async
 });
 
 describe('API de cobranza', () => {
-  it('sin usuario autenticado responde 401 (falla cerrado)', async () => {
+  it('sin auth configurada responde 503 (falla cerrado)', async () => {
     const res = await request(createApp()).get('/api/v1/billing-periods');
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(503);
+  });
+
+  it('sin token responde 401 y con el club ajeno 403', async () => {
+    const app = createApp({ auth: { runtimeClient: runtime, keys } });
+    const anonymous = await request(app).get('/api/v1/billing-periods').set('X-Organization-Id', orgA);
+    expect(anonymous.status).toBe(401);
+    const foreign = await request(app)
+      .get('/api/v1/billing-periods')
+      .set('Authorization', `Bearer ${await signAsA()}`)
+      .set('X-Organization-Id', orgB);
+    expect(foreign.status).toBe(403);
   });
 
   it('recorre período, emisión, pago y cuenta corriente por HTTP', async () => {
-    // Simula el middleware de auth, que todavía no existe.
-    const app = express();
-    app.use(express.json());
-    app.use((req, _res, next) => {
-      req.tenant = { organizationId: orgA, userId: userA, run: asA };
-      next();
-    });
-    app.use('/api/v1', createFinanceRouter());
-    app.use('/api/v1', createPaymentsRouter());
-    app.use(errorHandler);
+    const token = await signAsA();
+    const server = createApp({ auth: { runtimeClient: runtime, keys } });
+    const as = (req: request.Test) =>
+      req.set('Authorization', `Bearer ${token}`).set('X-Organization-Id', orgA);
+    const app = {
+      get: (url: string) => as(request(server).get(url)),
+      post: (url: string) => as(request(server).post(url)),
+    };
 
     const account = randomUUID();
 
-    const created = await request(app)
+    const created = await app
       .post('/api/v1/billing-periods')
       .send({ year: 2027, month: 1, dueDate: '2027-01-10' });
     expect(created.status).toBe(201);
     expect(created.body).toMatchObject({ year: 2027, month: 1, dueDate: '2027-01-10', status: 'OPEN' });
 
-    const issued = await request(app)
+    const issued = await app
       .post(`/api/v1/billing-periods/${created.body.id}/issue`)
       .send({ charges: [{ accountId: account, amountCents: 1_200_000 }] });
     expect(issued.status).toBe(200);
     expect(issued.body).toMatchObject({ createdCount: 1, billingPeriod: { status: 'ISSUED' } });
 
-    const invalid = await request(app)
+    const invalid = await app
       .post(`/api/v1/accounts/${account}/payments`)
       .send({ amountCents: 15.5, method: 'CASH' });
     expect(invalid.status).toBe(400);
@@ -445,15 +469,19 @@ describe('API de cobranza', () => {
     const cashAccount = randomUUID();
     const cashUrl = `/api/v1/accounts/${cashAccount}/payments`;
     const cash = { amountCents: 100, method: 'CASH' };
-    expect((await request(app).post(cashUrl).send(cash)).status).toBe(400);
+    expect((await app.post(cashUrl).send(cash)).status).toBe(400);
     const key = randomUUID();
     const retries = await Promise.all([1, 2].map(() =>
-      request(app).post(cashUrl).set('Idempotency-Key', key).send(cash)));
-    expect(retries.map((res) => res.status).sort()).toEqual([201, 409]);
-    const cashStatement = await request(app).get(`/api/v1/accounts/${cashAccount}/statement`);
+      app.post(cashUrl).set('Idempotency-Key', key).send(cash)));
+    // El reintento devuelve el mismo pago, no un conflicto ni un pago doble.
+    expect(retries.map((res) => res.status).sort()).toEqual([200, 201]);
+    expect(retries[0]?.body.payment.id).toBe(retries[1]?.body.payment.id);
+    const otherPayload = await app.post(cashUrl).set('Idempotency-Key', key).send({ ...cash, amountCents: 200 });
+    expect(otherPayload.status).toBe(409);
+    const cashStatement = await app.get(`/api/v1/accounts/${cashAccount}/statement`);
     expect(cashStatement.body.totals.paidCents).toBe(100);
 
-    const paid = await request(app)
+    const paid = await app
       .post(`/api/v1/accounts/${account}/payments`)
       .send({ amountCents: 1_200_000, method: 'TRANSFER', externalReference: `TRF-${suffix}` });
     expect(paid.status).toBe(201);
@@ -461,12 +489,12 @@ describe('API de cobranza', () => {
       { chargeId: expect.any(String), amountCents: 1_200_000 },
     ]);
 
-    const repeated = await request(app)
+    const repeated = await app
       .post(`/api/v1/accounts/${account}/payments`)
       .send({ amountCents: 1_200_000, method: 'TRANSFER', externalReference: `TRF-${suffix}` });
     expect(repeated.status).toBe(409);
 
-    const statement = await request(app).get(`/api/v1/accounts/${account}/statement`);
+    const statement = await app.get(`/api/v1/accounts/${account}/statement`);
     expect(statement.status).toBe(200);
     expect(statement.body).toMatchObject({
       accountId: account,

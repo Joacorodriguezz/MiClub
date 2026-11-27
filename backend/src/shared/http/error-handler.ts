@@ -1,4 +1,6 @@
 import type { ErrorRequestHandler, NextFunction, Request, Response } from 'express';
+import { clubIdFromHeader } from '../../infrastructure/logging/logger';
+import { captureError, moduleFromPath } from '../../infrastructure/observability/sentry';
 import { isUniqueViolation } from '../errors/http-error';
 
 function statusOf(err: unknown): number {
@@ -11,11 +13,11 @@ function statusOf(err: unknown): number {
 
 /**
  * Error handler único de la API. Los errores 4xx devuelven su mensaje; los 5xx,
- * un mensaje genérico (el stack solo fuera de producción).
+ * un mensaje genérico (el stack solo fuera de producción) y se reportan a Sentry.
  */
 export const errorHandler: ErrorRequestHandler = (
   err: unknown,
-  _req: Request,
+  req: Request,
   res: Response,
   _next: NextFunction,
 ) => {
@@ -42,6 +44,15 @@ export const errorHandler: ErrorRequestHandler = (
     typeof err.stack === 'string'
   ) {
     body.stack = err.stack;
+  }
+
+  if (status >= 500) {
+    const requestId = res.getHeader('X-Request-Id');
+    captureError(err, {
+      module: moduleFromPath(req.path),
+      clubId: clubIdFromHeader(req.get('X-Organization-Id')),
+      requestId: typeof requestId === 'string' ? requestId : null,
+    });
   }
 
   res.status(status).json(body);

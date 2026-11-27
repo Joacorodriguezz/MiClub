@@ -1,7 +1,8 @@
 import { type Request, type Response, Router } from 'express';
 import { badRequest } from '../../shared/errors/http-error';
 import { asyncHandler } from '../../shared/http/async-handler';
-import { getTenant, requireTenant } from '../../shared/http/tenant-context';
+import type { SessionAuth } from '../auth/router';
+import { currentUserId, getTenant, tenantGuard } from '../../shared/http/tenant-context';
 import { centsToNumber, parseAmountCents } from '../../shared/utils/money';
 import { parseUuid } from '../../shared/validation/ids';
 import { type NewManualPayment, recordManualPayment } from './payments.service';
@@ -45,14 +46,15 @@ function parseManualPayment(accountId: string, raw: Record<string, unknown>): Ne
   };
 }
 
-export function createPaymentsRouter(): Router {
+export function createPaymentsRouter(auth?: SessionAuth): Router {
   const router = Router();
+  const requireTenant = tenantGuard(auth);
 
   router.post(
     '/accounts/:accountId/payments',
     requireTenant,
     asyncHandler(async (req: Request, res: Response) => {
-      const { organizationId, userId, run } = getTenant(req);
+      const { organizationId, authUserId, run } = getTenant(req);
       const accountId = parseUuid(req.params.accountId, 'accountId');
       const raw = typeof req.body === 'object' && req.body !== null ? req.body : {};
       const input = parseManualPayment(accountId, raw);
@@ -62,11 +64,12 @@ export function createPaymentsRouter(): Router {
         throw badRequest('Un pago sin referencia requiere Idempotency-Key (UUID)');
       }
 
-      const { payment, allocations } = await run((tx) =>
-        recordManualPayment(tx, organizationId, input, userId),
+      const { payment, allocations, replayed } = await run(async (tx) =>
+        recordManualPayment(tx, organizationId, input, await currentUserId(tx, authUserId)),
       );
 
-      res.status(201).json({
+      // Un reintento con la misma Idempotency-Key devuelve el pago ya creado.
+      res.status(replayed ? 200 : 201).json({
         payment: {
           id: payment.id,
           accountId: payment.accountId,

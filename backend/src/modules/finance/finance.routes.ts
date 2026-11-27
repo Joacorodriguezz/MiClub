@@ -2,7 +2,8 @@ import { type Request, type Response, Router } from 'express';
 import type { BillingPeriod } from '@prisma/client';
 import { badRequest } from '../../shared/errors/http-error';
 import { asyncHandler } from '../../shared/http/async-handler';
-import { getTenant, requireTenant } from '../../shared/http/tenant-context';
+import type { SessionAuth } from '../auth/router';
+import { currentUserId, getTenant, tenantGuard } from '../../shared/http/tenant-context';
 import { formatDateOnly, parseDateOnly } from '../../shared/utils/dates';
 import { centsToNumber, parseAmountCents } from '../../shared/utils/money';
 import { parseUuid } from '../../shared/validation/ids';
@@ -90,11 +91,12 @@ export function serializeStatement(s: AccountStatement) {
 }
 
 /**
- * Rutas de cobranza. Todas exigen tenant (`requireTenant`) y corren dentro de
- * `withTenant`, así que RLS aplica en cada query.
+ * Rutas de cobranza. Todas pasan por el middleware de auth (`tenantGuard`) y
+ * corren dentro de `withTenant`, así que RLS aplica en cada query.
  */
-export function createFinanceRouter(): Router {
+export function createFinanceRouter(auth?: SessionAuth): Router {
   const router = Router();
+  const requireTenant = tenantGuard(auth);
 
   router.get(
     '/billing-periods',
@@ -123,9 +125,10 @@ export function createFinanceRouter(): Router {
     '/billing-periods/:periodId/issue',
     requireTenant,
     asyncHandler(async (req: Request, res: Response) => {
-      const { organizationId, userId, run } = getTenant(req);
+      const { organizationId, authUserId, run } = getTenant(req);
       const periodId = parseUuid(req.params.periodId, 'periodId');
       const result = await run(async (tx) => {
+        const userId = await currentUserId(tx, authUserId);
         const period = await tx.billingPeriod.findFirst({
           where: { id: periodId, organizationId },
           select: { year: true, month: true },
