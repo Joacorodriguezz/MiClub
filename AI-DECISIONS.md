@@ -694,6 +694,39 @@ presente y sea numérico, y agregar un test con un token válido sin ese claim.
 
 ---
 
+## AID-020 · Correcciones de la review del PR #9 y validación del JWT con JWKS
+
+**Fecha:** 2026-11-26 · **Responsable:** Joaquín · **Herramienta:** Claude Code (Claude Opus 5.5)
+
+**Problema abordado**
+La review del PR #9 pidió tres cambios bloqueantes: `/ready` probaba `DATABASE_URL`
+y no la conexión de runtime, la API arrancaba en producción con la auth apagada, y
+los tests del frontend no corrían en CI. Al preparar el ambiente, el JWKS del
+proyecto Supabase (`/auth/v1/.well-known/jwks.json`) mostró que los access tokens
+se firman con ES256. La API solo aceptaba HS256: todo login real iba a dar 401.
+
+**Prompt / Herramienta**
+Claude Code sobre `feat/backend-ready`: "decime qué falta para lanzar" y después
+"hacelo vos". El asistente leyó la review, consultó Vercel, Render y Supabase por
+sus conectores y aplicó los cambios.
+
+**Salida de la IA**
+- `/ready` usa `checkRuntimeDatabase`: rechaza superuser o BYPASSRLS y hace
+  `SELECT 1` con el cliente de runtime. Timeout de 2 s y cache de 5 s, para que el
+  health check de Render no golpee la base ni llene Sentry.
+- `server.ts` termina el proceso con `NODE_ENV=production` si falta la auth.
+- `verifyAccessToken` valida con `jose` contra el JWKS del proyecto (ES256/RS256)
+  y deja de aceptar HS256. Se quita `SUPABASE_JWT_SECRET`. Sigue exigiendo `exp`
+  (AID-019). Un JWKS inalcanzable responde 503, no 401.
+- Frontend: script `npm test` (`node --test`) y paso en CI. CI de frontend en Node 22.
+- `render.yaml`: health check en `/ready` y CORS de previews acotado al proyecto.
+
+**Validación y corrección humana**
+- **Pendiente:** revisión del equipo en el PR #9. Los tests unitarios pasan en local;
+  los de integración corren en CI. Esta entrada no marca el cambio como aceptado.
+
+---
+
 ## Plantilla para nuevas entradas
 
 ```markdown

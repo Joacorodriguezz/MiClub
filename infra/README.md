@@ -75,10 +75,14 @@ Orden, cuando alguien tenga las cuentas:
 5. En Render, completar los valores que el blueprint deja en el dashboard:
    `DATABASE_URL` (alcanza para el `SELECT 1` de `/ready`; puede ser el rol de
    runtime), `RUNTIME_DATABASE_URL` (LOGIN, sin `SUPERUSER` ni `BYPASSRLS`,
-   miembro de `miclub_app`), `SUPABASE_URL`, `SUPABASE_JWT_SECRET` (JWT secret,
-   no la anon key, 32 caracteres o más), `CORS_ORIGIN` (la URL estable del
-   frontend, sin barra final). `CORS_ORIGIN_PATTERN` ya viene en el blueprint
-   para los previews `*.vercel.app`.
+   miembro de `miclub_app`), `SUPABASE_URL` y `CORS_ORIGIN` (la URL estable del
+   frontend, sin barra final). `CORS_ORIGIN_PATTERN` ya viene en el blueprint,
+   acotado a los previews de `miclub-frontend`. No hace falta ningún JWT secret:
+   la API valida los tokens con las claves públicas del proyecto
+   (`SUPABASE_URL/auth/v1/.well-known/jwks.json`, ES256). Sin `RUNTIME_DATABASE_URL`
+   o `SUPABASE_URL`, en producción la API no arranca.
+   El health check del servicio tiene que ser `/ready`, no `/health`: `/ready`
+   prueba el rol de runtime.
 6. En Vercel, crear un token y anotar el **Org ID** y el **Project ID** del
    proyecto con root `frontend`. Cargarlos como `VERCEL_TOKEN`, `VERCEL_ORG_ID`
    y `VERCEL_PROJECT_ID`.
