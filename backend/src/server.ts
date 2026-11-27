@@ -1,5 +1,6 @@
 import { createApp } from './app';
 import { buildCorsOptions, validateProductionEnv } from './config/cors';
+import { checkRuntimeDatabase } from './infrastructure/database/readiness';
 import { createRuntimeClient } from './infrastructure/database/runtimeClient';
 import { log } from './infrastructure/logging/logger';
 import { initSentry } from './infrastructure/observability/sentry';
@@ -30,14 +31,25 @@ try {
 }
 
 const PORT = Number(process.env.PORT ?? 3000);
-const app = createApp({ auth: createAuth() });
+const auth = createAuth();
+if (!auth && process.env.NODE_ENV === 'production') {
+  // Sin auth la API respondería 503 en todo lo autenticado con /health en verde.
+  log({ level: 'error', msg: 'En producción la auth es obligatoria. No se levanta el servidor.' });
+  process.exit(1);
+}
+
+// Con auth, /ready prueba el rol de runtime: es la conexión de todo el tráfico autenticado.
+const app = createApp({
+  auth,
+  readinessProbe: auth ? () => checkRuntimeDatabase(auth.runtimeClient) : undefined,
+});
 
 function createAuth(): { runtimeClient: ReturnType<typeof createRuntimeClient> } | undefined {
   const databaseUrl = process.env.RUNTIME_DATABASE_URL?.trim();
   if (!databaseUrl || !readAuthConfig()) {
     log({
       level: 'error',
-      msg: 'Auth deshabilitada: faltan RUNTIME_DATABASE_URL, SUPABASE_URL o SUPABASE_JWT_SECRET (mínimo 32 caracteres).',
+      msg: 'Auth deshabilitada: faltan RUNTIME_DATABASE_URL o SUPABASE_URL.',
     });
     return undefined;
   }

@@ -12,8 +12,24 @@ import { requestLogger } from './infrastructure/logging/requestLog';
 import { captureError, moduleFromPath } from './infrastructure/observability/sentry';
 import { createSessionRouter, type SessionAuth } from './modules/auth/router';
 
-/** Sonda de readiness. El default ejecuta `SELECT 1` contra DATABASE_URL. */
+/**
+ * Sonda de readiness. El default ejecuta `SELECT 1` contra DATABASE_URL.
+ * En el servidor, con auth configurada, prueba el rol de runtime.
+ */
 export type ReadinessProbe = () => Promise<unknown>;
+
+/** La sonda no puede colgar el health check de Render. */
+const READINESS_TIMEOUT_MS = 2000;
+/** Un monitor frecuente no golpea la base en cada request. */
+const READINESS_CACHE_MS = 5000;
+
+function withTimeout(probe: ReadinessProbe, ms: number): Promise<unknown> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error('readiness timeout')), ms);
+  });
+  return Promise.race([probe(), timeout]).finally(() => clearTimeout(timer));
+}
 
 /**
  * Carga el cliente Prisma solo al atender `/ready`, para que `/health` y los
@@ -35,6 +51,7 @@ export function createApp(options?: {
   auth?: SessionAuth;
 }): Express {
   const readinessProbe = options?.readinessProbe ?? defaultReadinessProbe;
+  let lastReadiness: { ok: boolean; at: number } | null = null;
   const app = express();
 
   // CORS antes del body parser: JSON inválido sigue respondiendo con headers CORS.
@@ -52,10 +69,19 @@ export function createApp(options?: {
 
   // Readiness: la base responde. El error no se devuelve: puede incluir el DSN.
   app.get('/ready', async (_req: Request, res: Response) => {
+    if (lastReadiness && Date.now() - lastReadiness.at < READINESS_CACHE_MS) {
+      res
+        .status(lastReadiness.ok ? 200 : 503)
+        .json({ status: lastReadiness.ok ? 'ok' : 'unavailable' });
+      return;
+    }
     try {
-      await readinessProbe();
+      await withTimeout(readinessProbe, READINESS_TIMEOUT_MS);
+      lastReadiness = { ok: true, at: Date.now() };
       res.status(200).json({ status: 'ok' });
     } catch (error) {
+      // Mientras dura el cache, un fallo repetido no vuelve a loguear ni a ir a Sentry.
+      lastReadiness = { ok: false, at: Date.now() };
       const requestId = res.getHeader('X-Request-Id');
       log({
         level: 'error',

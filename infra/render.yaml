@@ -10,7 +10,8 @@ services:
     # `npm run build` ya corre `prebuild` (`prisma generate`). No repetirlo.
     buildCommand: npm install && npm run build
     startCommand: npm start
-    healthCheckPath: /health
+    # /ready prueba el rol de runtime: un secret mal cargado no deja el deploy en verde.
+    healthCheckPath: /ready
     # El push no despliega solo: Actions migra y después pega al deploy hook.
     # Hay que crear ese hook en el dashboard y apagar el auto-deploy, o sincronizar este blueprint.
     autoDeploy: false
@@ -25,15 +26,15 @@ services:
       # Auth y withTenant. Rol LOGIN, sin SUPERUSER ni BYPASSRLS, miembro de miclub_app.
       - key: RUNTIME_DATABASE_URL
         sync: false
+      # Emisor del JWT y JWKS público. No hay JWT secret: Supabase firma con ES256.
       - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_JWT_SECRET
         sync: false
       # Errores de la API. Vacío: el proceso arranca igual y no llama a Sentry.
       - key: SENTRY_DSN
         sync: false
       - key: CORS_ORIGIN
         sync: false
-      # Previews de Vercel: un hostname distinto por PR. No es un secreto.
+      # Previews de Vercel de este proyecto: un hostname distinto por PR. No es un secreto.
+      # Acotado al proyecto: no acepta el origen de cualquier *.vercel.app.
       - key: CORS_ORIGIN_PATTERN
-        value: "^https://[a-z0-9-]+\\.vercel\\.app$"
+        value: "^https://miclub-frontend-[a-z0-9-]+-joacorodriguezzs-projects\\.vercel\\.app$"

@@ -1,6 +1,8 @@
 import request from 'supertest';
 import { afterAll, describe, expect, it } from 'vitest';
 import { createApp } from './app';
+import { checkRuntimeDatabase } from './infrastructure/database/readiness';
+import { createRuntimeClient } from './infrastructure/database/runtimeClient';
 
 /**
  * Readiness contra Postgres real. Usa el cliente de proceso (`DATABASE_URL`),
@@ -26,5 +28,27 @@ describe('GET /ready (integración)', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ status: 'ok' });
+  });
+
+  it('con la sonda de runtime responde 200 con miclub_runtime y 503 con un superuser', async () => {
+    const runtimeUrl = process.env.RUNTIME_DATABASE_URL;
+    const adminUrl = process.env.DATABASE_URL;
+    if (!runtimeUrl || !adminUrl) {
+      throw new Error('Faltan RUNTIME_DATABASE_URL o DATABASE_URL para el test de GET /ready');
+    }
+
+    const runtime = createRuntimeClient(runtimeUrl);
+    const admin = createRuntimeClient(adminUrl);
+    try {
+      const ok = await request(createApp({ readinessProbe: () => checkRuntimeDatabase(runtime) })).get('/ready');
+      expect(ok.status).toBe(200);
+
+      // En CI DATABASE_URL es postgres (superuser): la sonda de runtime tiene que rechazarlo.
+      const rejected = await request(createApp({ readinessProbe: () => checkRuntimeDatabase(admin) })).get('/ready');
+      expect(rejected.status).toBe(503);
+    } finally {
+      await runtime.$disconnect();
+      await admin.$disconnect();
+    }
   });
 });

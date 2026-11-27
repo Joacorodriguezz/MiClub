@@ -25,4 +25,27 @@ describe('GET /ready', () => {
     expect(serialized).not.toContain('secret');
     expect(serialized).not.toContain('postgresql');
   });
+
+  it('responde 503 si la sonda no contesta a tiempo', async () => {
+    const app = createApp({ readinessProbe: () => new Promise(() => undefined) });
+    const response = await request(app).get('/ready');
+
+    expect(response.status).toBe(503);
+    expect(response.body).toEqual({ status: 'unavailable' });
+  }, 10_000);
+
+  it('reusa el resultado reciente sin volver a consultar la base', async () => {
+    let calls = 0;
+    const app = createApp({
+      readinessProbe: async () => {
+        calls += 1;
+      },
+    });
+
+    await request(app).get('/ready');
+    const second = await request(app).get('/ready');
+
+    expect(second.status).toBe(200);
+    expect(calls).toBe(1);
+  });
 });
