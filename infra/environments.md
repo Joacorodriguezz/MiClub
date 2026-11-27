@@ -11,8 +11,8 @@ tras el sprint de provisión (~15 min) siguiendo [`README.md`](README.md).
 | Componente | Proveedor | Proyecto / servicio | URL pública | Responsable | Fecha |
 |---|---|---|---|---|---|
 | Frontend (SPA) | Vercel | `miclub-frontend` | _(completar tras deploy)_ | M1 · Plataforma | |
-| API (`/health`) | Render | `miclub-api` (Blueprint) | _(completar tras deploy)_ | M1 · Plataforma | |
-| PostgreSQL | Supabase | `miclub-dev` | — | M1 · Plataforma | |
+| API (`/health`) | Render | `miclub-api` (Web Service) | https://miclub-api-vf4m.onrender.com | M1 · Plataforma | 2026-11-21 |
+| PostgreSQL | Supabase | `miclub` | — | M1 · Plataforma | 2026-11-21 |
 | Auth + Storage | Supabase | _(mismo proyecto)_ | — | M1 · Plataforma | |
 
 **Rama de despliegue:** `development`  
@@ -64,6 +64,27 @@ se valida en CP2 con schema y migraciones.
 **Backup (CP1):** Supabase Free incluye backups diarios gestionados (retención limitada por
 plan). Política formal de RPO/RTO se define en CP2 al tener datos de negocio.
 
+### Secrets de GitHub Actions
+
+Nombres nada más. Los valores viven en GitHub → Settings → Secrets and variables →
+Actions. El procedimiento está en [`README.md`](README.md).
+
+| Secret | Ambiente que toca | Estado |
+|---|---|---|
+| `MIGRATION_DATABASE_URL` | Base de `miclub-dev`, solo desde Actions | _(cargar)_ |
+| `RENDER_DEPLOY_HOOK_URL` | Servicio `miclub-api` | _(cargar)_ |
+| `VERCEL_TOKEN` | Proyecto `miclub-frontend` | _(cargar)_ |
+| `VERCEL_ORG_ID` | Proyecto `miclub-frontend` | _(cargar)_ |
+| `VERCEL_PROJECT_ID` | Proyecto `miclub-frontend` | _(cargar)_ |
+
+`main` no tiene secrets propios: no hay un segundo proyecto en este registro, y el
+pipeline no lo despliega.
+
+### Sentry
+
+No es un secret de GitHub Actions. `SENTRY_DSN` vive en Render. `VITE_SENTRY_DSN`
+vive en Vercel (Preview y Production). Los dos vacíos hasta que exista el proyecto.
+
 ## Comprobaciones mínimas
 
 Ejecutar tras provisionar (o usar [`verify-setup.sh`](verify-setup.sh)):
@@ -79,6 +100,24 @@ Completar la columna **Fecha** y las URLs de la primera tabla cuando existan los
 
 | Servicio | Región elegida | Plan | Notas |
 |---|---|---|---|
-| Supabase | South America (São Paulo) | Free | Project ref: _(completar)_ |
-| Render API | Oregon (US West) | Free | Service ID: _(completar)_ |
+| Supabase | South America (São Paulo) | Free | Project ref: `bumoryhpbvwgoxjiqltt` |
+| Render API | Oregon (US West) | Free | Service ID: `srv-dc0vaj59fdbs7398qks0` |
 | Vercel | Edge global | Hobby | Project: _(completar)_ |
+
+## Decisión: este ambiente es el definitivo (2026-11-21)
+
+El proyecto no sale a producción real: el TPI se defiende sobre este ambiente. No hay
+ambiente separado de producción ni planes pagos.
+
+| Tema | Estado |
+|---|---|
+| Rama de despliegue | `development` (autodeploy en cada commit) |
+| Rol de la API | `miclub_runtime` (LOGIN, sin `BYPASSRLS`, miembro de `miclub_app`) |
+| `DATABASE_URL` | Session pooler de Supabase, puerto 5432 (`aws-0-sa-east-1.pooler.supabase.com`), usuario `miclub_runtime.<project-ref>`. La conexión directa `db.<ref>.supabase.co` no resuelve por IPv4 y no sirve desde Render |
+| Migraciones | Aplicadas y registradas en `_prisma_migrations` (`20261025000000_init_tenancy`) |
+| Backups | Sin point-in-time recovery (plan free). Limitación aceptada |
+| Cold start | Render free se duerme por inactividad: despertar con `GET /health` antes de una demo |
+| Pausa de Supabase | El plan free pausa el proyecto tras 7 días sin actividad: verificarlo antes de cada entrega |
+
+Pendiente: `CORS_ORIGIN` apunta a `http://localhost:5173` hasta que exista el frontend
+en Vercel.
