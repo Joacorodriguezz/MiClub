@@ -1,4 +1,5 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { AccountStatement } from '../features/finance/AccountStatement';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { getSession, isOrganizationId, readApiUrl } from '../shared/api/client';
 import { createSupabase, readSupabaseConfig } from '../features/auth/supabase';
@@ -6,7 +7,7 @@ import { createSupabase, readSupabaseConfig } from '../features/auth/supabase';
 type SessionView =
   | { kind: 'idle' }
   | { kind: 'loading' }
-  | { kind: 'in'; organizationId: string; role: string }
+  | { kind: 'in'; userId: string; organizationId: string; role: string }
   | { kind: 'rejected'; message: string };
 
 export function LoginPage() {
@@ -20,6 +21,14 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [organizationId, setOrganizationId] = useState('');
   const [session, setSession] = useState<SessionView>({ kind: 'idle' });
+
+  useEffect(() => {
+    const subscription = supabase?.auth.onAuthStateChange((_event, current) => {
+      setSession(previous => previous.kind === 'in' && previous.userId !== current?.user.id
+        ? { kind: 'idle' } : previous);
+    }).data.subscription;
+    return () => subscription?.unsubscribe();
+  }, [supabase]);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -47,7 +56,7 @@ export function LoginPage() {
       const result = await getSession(data.session.access_token, clubId);
       const body = result.body;
       if (result.httpStatus === 200 && isSessionBody(body)) {
-        setSession({ kind: 'in', organizationId: body.organizationId, role: body.role });
+        setSession({ kind: 'in', userId: data.session.user.id, organizationId: body.organizationId, role: body.role });
         return;
       }
       const message =
@@ -128,6 +137,10 @@ export function LoginPage() {
           ) : null}
           <SessionResult session={session} />
         </form>
+      )}
+      {session.kind === 'in' && supabase && (
+        <AccountStatement key={session.organizationId + session.userId}
+          club={session.organizationId} userId={session.userId} auth={supabase} />
       )}
     </main>
   );
