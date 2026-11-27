@@ -1,9 +1,12 @@
 import type { PrismaClient } from '@prisma/client';
 import { Router } from 'express';
+import type { JWTVerifyGetKey } from 'jose';
 import { requireTenant, sendAuthError } from './requireTenant';
 
 export type SessionAuth = {
   runtimeClient: PrismaClient;
+  /** Claves para validar el JWT. Sin esto, el JWKS público del proyecto Supabase. */
+  keys?: JWTVerifyGetKey;
 };
 
 /**
@@ -20,7 +23,7 @@ export function createSessionRouter(auth?: SessionAuth): Router {
     return router;
   }
 
-  router.get('/session', requireTenant(auth.runtimeClient), async (req, res) => {
+  router.get('/session', requireTenant(auth.runtimeClient, auth.keys), async (req, res) => {
     const organizationId = req.auth?.organizationId;
     const run = req.withTenant;
     if (!organizationId || !run || !req.auth) {

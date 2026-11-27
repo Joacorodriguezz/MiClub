@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import type { Request, RequestHandler, Response } from 'express';
+import type { JWTVerifyGetKey } from 'jose';
 import type { TenantTransaction } from '../../infrastructure/database/tenant';
 import { assertRuntimeConnection, RuntimeRoleRejected } from '../../infrastructure/database/runtimeClient';
 import { readAuthConfig, verifyAccessToken } from './accessToken';
@@ -29,9 +30,9 @@ declare global {
  * Valida el access token, comprueba la membresía y deja `req.withTenant`
  * atado a ese club y al cliente de runtime. No usa el cliente de migraciones.
  */
-export function requireTenant(runtimeClient: PrismaClient): RequestHandler {
+export function requireTenant(runtimeClient: PrismaClient, keys?: JWTVerifyGetKey): RequestHandler {
   return (req, res, next) => {
-    attachTenant(req, runtimeClient)
+    attachTenant(req, runtimeClient, keys)
       .then(() => next())
       .catch((error: unknown) => sendAuthError(res, error));
   };
@@ -45,8 +46,12 @@ export function sendAuthError(res: Response, error: unknown): void {
   res.status(500).json({ error: 'Internal Server Error' });
 }
 
-async function attachTenant(req: Request, runtimeClient: PrismaClient): Promise<void> {
-  const config = readAuthConfig();
+async function attachTenant(
+  req: Request,
+  runtimeClient: PrismaClient,
+  keys: JWTVerifyGetKey | undefined,
+): Promise<void> {
+  const config = readAuthConfig(process.env, keys);
   if (!config) {
     throw new AuthUnavailableError();
   }
@@ -55,7 +60,7 @@ async function attachTenant(req: Request, runtimeClient: PrismaClient): Promise<
   if (!token) {
     throw new UnauthorizedError();
   }
-  const { authUserId } = verifyAccessToken(token, config);
+  const { authUserId } = await verifyAccessToken(token, config);
 
   const organizationId = req.get('X-Organization-Id')?.trim();
   if (!organizationId || !UUID_PATTERN.test(organizationId)) {

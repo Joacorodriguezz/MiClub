@@ -1,10 +1,9 @@
 import type { PrismaClient } from '@prisma/client';
-import jwt from 'jsonwebtoken';
+import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT, type JWTVerifyGetKey, type KeyLike } from 'jose';
 import request from 'supertest';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../../app';
 
-const SECRET = 'test-only-supabase-jwt-secret-32b';
 const ISSUER = 'http://127.0.0.1:54321/auth/v1';
 const AUTH_USER_ID = '11111111-1111-4111-8111-111111111111';
 
@@ -16,20 +15,28 @@ function untouchedClient(): PrismaClient {
   });
 }
 
-function bearer(): string {
-  const token = jwt.sign({ sub: AUTH_USER_ID, role: 'authenticated' }, SECRET, {
-    algorithm: 'HS256',
-    expiresIn: '1h',
-    audience: 'authenticated',
-    issuer: ISSUER,
-  });
+let privateKey: KeyLike;
+let keys: JWTVerifyGetKey;
+
+beforeAll(async () => {
+  const pair = await generateKeyPair('ES256');
+  privateKey = pair.privateKey;
+  keys = createLocalJWKSet({ keys: [{ ...(await exportJWK(pair.publicKey)), kid: 'test-key', alg: 'ES256' }] });
+});
+
+async function bearer(): Promise<string> {
+  const token = await new SignJWT({ sub: AUTH_USER_ID, role: 'authenticated' })
+    .setProtectedHeader({ alg: 'ES256', kid: 'test-key' })
+    .setIssuer(ISSUER)
+    .setAudience('authenticated')
+    .setExpirationTime('1h')
+    .sign(privateKey);
   return `Bearer ${token}`;
 }
 
 describe('GET /session sin base', () => {
   afterEach(() => {
     delete process.env.SUPABASE_URL;
-    delete process.env.SUPABASE_JWT_SECRET;
   });
 
   it('responde 503 si la app no tiene auth, y /health sigue abierto', async () => {
@@ -44,13 +51,12 @@ describe('GET /session sin base', () => {
 
   it('responde 401 sin token y 400 con organización inválida, sin consultar la base', async () => {
     process.env.SUPABASE_URL = 'http://127.0.0.1:54321';
-    process.env.SUPABASE_JWT_SECRET = SECRET;
-    const app = createApp({ auth: { runtimeClient: untouchedClient() } });
+    const app = createApp({ auth: { runtimeClient: untouchedClient(), keys } });
 
     const missing = await request(app).get('/session');
     const badOrg = await request(app)
       .get('/session')
-      .set('Authorization', bearer())
+      .set('Authorization', await bearer())
       .set('X-Organization-Id', 'club-a');
 
     expect(missing.status).toBe(401);
