@@ -73,7 +73,11 @@ jobs:
       - name: Instalar dependencias
         run: npm ci
 
+      # Desde la raíz del repo: el proyecto de Vercel tiene Root Directory = `frontend`
+      # y el CLI lo aplica sobre el directorio actual. Corrido desde `frontend/` no lee
+      # `frontend/vercel.json` ni encuentra los node_modules.
       - name: Publicar preview o el ambiente development
+        working-directory: .
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
