@@ -1,16 +1,13 @@
 import cors from 'cors';
-import express, {
-  type ErrorRequestHandler,
-  type Express,
-  type NextFunction,
-  type Request,
-  type Response,
-} from 'express';
+import express, { type Express, type Request, type Response } from 'express';
 import { buildCorsOptions } from './config/cors';
-import { clubIdFromHeader, log } from './infrastructure/logging/logger';
+import { log } from './infrastructure/logging/logger';
 import { requestLogger } from './infrastructure/logging/requestLog';
-import { captureError, moduleFromPath } from './infrastructure/observability/sentry';
+import { captureError } from './infrastructure/observability/sentry';
 import { createSessionRouter, type SessionAuth } from './modules/auth/router';
+import { createFinanceRouter } from './modules/finance/finance.routes';
+import { createPaymentsRouter } from './modules/payments/payments.routes';
+import { errorHandler } from './shared/http/error-handler';
 
 /**
  * Sonda de readiness. El default ejecuta `SELECT 1` contra DATABASE_URL.
@@ -43,7 +40,8 @@ async function defaultReadinessProbe(): Promise<void> {
 /**
  * Construye la aplicación Express (sin rutas de negocio todavía).
  *
- * Los módulos de `src/modules/*` registran aquí sus routers.
+ * Cada módulo de `src/modules/*` expone su router y se monta acá; los de
+ * negocio, bajo `/api/v1` y detrás del middleware de auth.
  * No agregar lógica de dominio en este archivo.
  */
 export function createApp(options?: {
@@ -99,59 +97,12 @@ export function createApp(options?: {
   });
 
   app.use(createSessionRouter(options?.auth));
+  app.use('/api/v1', createFinanceRouter(options?.auth));
+  app.use('/api/v1', createPaymentsRouter(options?.auth));
 
   app.use((_req: Request, res: Response) => {
     res.status(404).json({ error: 'Not Found' });
   });
-
-  const errorHandler: ErrorRequestHandler = (
-    err: unknown,
-    req: Request,
-    res: Response,
-    _next: NextFunction,
-  ) => {
-    const status =
-      typeof err === 'object' &&
-      err !== null &&
-      'type' in err &&
-      err.type === 'entity.parse.failed'
-        ? 400
-        : typeof err === 'object' && err !== null && 'status' in err && typeof err.status === 'number'
-          ? err.status
-          : 500;
-    let message = 'Internal Server Error';
-    if (
-      status < 500 &&
-      typeof err === 'object' &&
-      err !== null &&
-      'message' in err &&
-      typeof err.message === 'string'
-    ) {
-      message = err.message;
-    }
-    const body: { error: string; stack?: string } = { error: message };
-
-    if (
-      process.env.NODE_ENV !== 'production' &&
-      typeof err === 'object' &&
-      err !== null &&
-      'stack' in err &&
-      typeof err.stack === 'string'
-    ) {
-      body.stack = err.stack;
-    }
-
-    if (status >= 500) {
-      const requestId = res.getHeader('X-Request-Id');
-      captureError(err, {
-        module: moduleFromPath(req.path),
-        clubId: clubIdFromHeader(req.get('X-Organization-Id')),
-        requestId: typeof requestId === 'string' ? requestId : null,
-      });
-    }
-
-    res.status(status).json(body);
-  };
 
   app.use(errorHandler);
 

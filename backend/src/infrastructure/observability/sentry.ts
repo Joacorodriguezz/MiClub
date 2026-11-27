@@ -47,7 +47,9 @@ export function moduleFromPath(path: string): string {
   if (path === '/session' || path.startsWith('/session/')) {
     return 'auth';
   }
-  const segment = path.split('/').filter(Boolean)[0];
+  const segments = path.split('/').filter(Boolean);
+  // Las rutas de negocio van bajo /api/v1: el módulo es el segmento siguiente.
+  const segment = segments[0] === 'api' && segments[1] === 'v1' ? segments[2] : segments[0];
   return segment ?? 'platform';
 }
 

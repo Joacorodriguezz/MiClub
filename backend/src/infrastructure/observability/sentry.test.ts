@@ -27,6 +27,7 @@ describe('moduleFromPath', () => {
     expect(moduleFromPath('/ready')).toBe('platform');
     expect(moduleFromPath('/session')).toBe('auth');
     expect(moduleFromPath('/members/1')).toBe('members');
+    expect(moduleFromPath('/api/v1/billing-periods')).toBe('billing-periods');
   });
 });
 
